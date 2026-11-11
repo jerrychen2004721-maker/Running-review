@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析系統 - 觸地時間(GCT)與完整數據</title>
+    <title>跑步姿態分析 - 腳踝 2D 軌跡圖與完整數據</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
@@ -17,29 +17,32 @@
         
         .controls { background: white; padding: 15px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; width: 100%; max-width: 800px; }
         .btn-group button { padding: 10px 20px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 5px; margin: 0 5px; }
-        #startBtn { background-color: #28a745; }
-        #startBtn:hover { background-color: #218838; }
-        #uploadBtn { background-color: #007bff; }
-        #uploadBtn:hover { background-color: #0056b3; }
+        #startBtn { background-color: #28a745; } #startBtn:hover { background-color: #218838; }
+        #uploadBtn { background-color: #007bff; } #uploadBtn:hover { background-color: #0056b3; }
         
         .calibration { margin-top: 15px; font-size: 1.1em; }
         .calibration input { font-size: 1em; width: 70px; text-align: center; margin-left: 10px; }
 
-        #dashboard { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-        .card { background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-width: 90px; flex: 1; max-width: 130px;}
+        #dashboard { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto;}
+        .card { background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex: 1; min-width: 110px;}
         .card .title { font-size: 0.85em; color: #666; }
         .card .value { font-size: 1.4em; font-weight: bold; color: #333; margin-top: 5px; }
         .card .unit { font-size: 0.75em; color: #888; }
-        .card.highlight { border-bottom: 4px solid #FFC300; }
-        .card.gct-card { border-bottom: 4px solid #E74C3C; } /* 凸顯觸地時間 */
+        .card.gct-card { border-bottom: 4px solid #E74C3C; }
 
-        .charts-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
-        .chart-box { height: 150px; margin-bottom: 20px; }
+        /* 圖表網格排版 */
+        .charts-container { 
+            background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            width: 100%; max-width: 700px; 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+        }
+        .chart-box { height: 180px; position: relative; }
+        @media (max-width: 768px) { .charts-container { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
-    <h2>跑者矢狀面動態分析系統</h2>
+    <h2>跑者矢狀面動態分析 - 腳踝軌跡與步態週期</h2>
     
     <div class="controls">
         <div class="btn-group">
@@ -54,10 +57,9 @@
     
     <div id="dashboard">
         <div class="card gct-card"><div class="title">觸地時間 GCT</div><div class="value"><span id="gct_display">0</span><span class="unit"> ms</span></div></div>
-        <div class="card highlight"><div class="title">單步垂直振幅</div><div class="value"><span id="vertical_oscillation">0.0</span><span class="unit"> cm</span></div></div>
+        <div class="card"><div class="title">單步垂直振幅</div><div class="value"><span id="vertical_oscillation">0.0</span><span class="unit"> cm</span></div></div>
         <div class="card"><div class="title">平均步頻</div><div class="value"><span id="cadence">0</span><span class="unit"> SPM</span></div></div>
-        <div class="card"><div class="title">單次跨距</div><div class="value"><span id="current_stride">0.0</span><span class="unit"> cm</span></div></div>
-        <div class="card"><div class="title">總步數</div><div class="value"><span id="step_count">0</span><span class="unit"> 步</span></div></div>
+        <div class="card"><div class="title">平均跨距</div><div class="value"><span id="avg_stride">0.0</span><span class="unit"> cm</span></div></div>
     </div>
 
     <div class="main-layout">
@@ -66,6 +68,8 @@
             <canvas id="output_canvas" width="640" height="480"></canvas>
         </div>
         <div class="charts-container">
+            <!-- 新增：右腳踝 2D 軌跡圖 -->
+            <div class="chart-box"><canvas id="trajChart"></canvas></div>
             <div class="chart-box"><canvas id="comChart"></canvas></div>
             <div class="chart-box"><canvas id="angleChart"></canvas></div>
             <div class="chart-box"><canvas id="strideChart"></canvas></div>
@@ -80,50 +84,52 @@
         const uploadBtn = document.getElementById('uploadBtn');
         const videoUpload = document.getElementById('videoUpload');
         
-        let cameraActive = false;
-        let animationFrameId;
+        let cameraActive = false; let animationFrameId;
         
-        let prevAnkleDist = 0;
-        let isIncreasing = false;
-        let lastStepTime = 0;
-        let firstStepTime = 0;
-        let stepCount = 0;
-        let strideHistory = [];
-        
-        let currentStepMaxY = -Infinity;
-        let currentStepMinY = Infinity;
+        let prevAnkleDist = 0; let isIncreasing = false; let lastStepTime = 0; let firstStepTime = 0; 
+        let stepCount = 0; let strideHistory = []; let currentStepMaxY = -Infinity; let currentStepMinY = Infinity;
 
-        // ================= GCT 估算變數 =================
-        let dynamicGroundY = 0; // 動態地板高度 (Y軸向下，數值越大越接近地板)
-        const groundTolerance = 0.015; // 判定觸地的 Y 軸容許誤差 (約佔畫面高度 1.5%)
-        
-        let isLeftGrounded = false;
-        let isRightGrounded = false;
-        let leftContactStartTime = 0;
-        let rightContactStartTime = 0;
+        // GCT 變數
+        let dynamicGroundY = 0; const groundTolerance = 0.015; 
+        let isLeftGrounded = false; let isRightGrounded = false; let leftContactStartTime = 0; let rightContactStartTime = 0;
 
         // ================= 圖表初始化 =================
         const maxDataPoints = 90; 
-        const chartOptions = { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false } }, elements: { point: { radius: 0 } } };
+        const trajMaxPoints = 50; // 軌跡圖保留約 1.5 步的節點，形成一個封閉的圓
+        
+        const chartOptions = { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false } }, elements: { point: { radius: 0 } }, plugins: { legend: { labels: { font: { size: 10 } } } } };
 
-        const comChart = new Chart(document.getElementById('comChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '重心垂直高度 (cm)', data: [], borderColor: '#FFC300', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { x: { display: false } } } });
+        // 1. 重心高度圖
+        const comChart = new Chart(document.getElementById('comChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '重心垂直高度 (cm)', data: [], borderColor: '#FFC300', borderWidth: 2, tension: 0.3 }] }, options: chartOptions });
+        // 2. 膝蓋角度圖
         const angleChart = new Chart(document.getElementById('angleChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '右膝關節角度 (°)', data: [], borderColor: '#FF5733', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 60, suggestedMax: 180 }, x: { display: false } } } });
+        // 3. 跨距變化圖
         const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#33A1FF', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } } });
+        
+        // 4. 新增：右腳踝 2D 軌跡圖 (Scatter Chart 配合 showLine)
+        const trajChart = new Chart(document.getElementById('trajChart').getContext('2d'), { 
+            type: 'scatter', 
+            data: { datasets: [{ label: '右腳踝軌跡 (以髖部為原點)', data: [], borderColor: '#2ECC71', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }] }, 
+            options: { 
+                responsive: true, maintainAspectRatio: false, animation: false,
+                scales: { 
+                    x: { display: true, title: { display: true, text: '相對於重心的水平位置 (cm)', font: { size: 10 } } },
+                    y: { display: true, title: { display: true, text: '離地高度 (cm)', font: { size: 10 } }, suggestedMin: -5, suggestedMax: 40 }
+                },
+                plugins: { legend: { labels: { font: { size: 10 } } } }
+            } 
+        });
 
         function resetData() {
             prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0; strideHistory = [];
-            currentStepMaxY = -Infinity; currentStepMinY = Infinity;
-            dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
+            currentStepMaxY = -Infinity; currentStepMinY = Infinity; dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
             
-            document.getElementById('step_count').innerText = "0";
-            document.getElementById('current_stride').innerText = "0.0";
-            document.getElementById('cadence').innerText = "0";
-            document.getElementById('vertical_oscillation').innerText = "0.0";
-            document.getElementById('gct_display').innerText = "0";
+            document.getElementById('step_count') ? document.getElementById('step_count').innerText = "0" : null;
+            document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
+            document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
             
-            comChart.data.labels = []; comChart.data.datasets[0].data = []; comChart.update();
-            angleChart.data.labels = []; angleChart.data.datasets[0].data = []; angleChart.update();
-            strideChart.data.labels = []; strideChart.data.datasets[0].data = []; strideChart.update();
+            [comChart, angleChart, strideChart].forEach(c => { c.data.labels = []; c.data.datasets[0].data = []; c.update(); });
+            trajChart.data.datasets[0].data = []; trajChart.update();
         }
 
         function calculateAngle(a, b, c) {
@@ -136,123 +142,77 @@
         pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
         pose.onResults((results) => {
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.save(); canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.poseLandmarks) {
                 drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 1});
 
-                const nose = results.poseLandmarks[0];
-                const leftHip = results.poseLandmarks[23];
-                const rightHip = results.poseLandmarks[24];
-                const rightKnee = results.poseLandmarks[26];
-                const leftAnkle = results.poseLandmarks[27];
-                const rightAnkle = results.poseLandmarks[28];
+                const nose = results.poseLandmarks[0]; const leftHip = results.poseLandmarks[23]; const rightHip = results.poseLandmarks[24];
+                const rightKnee = results.poseLandmarks[26]; const leftAnkle = results.poseLandmarks[27]; const rightAnkle = results.poseLandmarks[28];
 
                 const currentTime = cameraActive ? performance.now() / 1000 : videoElement.currentTime;
                 
-                let currentAngle = null; let currentStrideCm = null; let comYCm = null;
+                let currentAngle = null; let currentStrideCm = null; let comYCm = null; let trajPoint = null;
 
-                // 1. GCT 觸地時間估算
-                if (leftAnkle && rightAnkle && leftAnkle.visibility > 0.6 && rightAnkle.visibility > 0.6) {
-                    // 畫面 Y 軸向下遞增。找出當前畫面中最接近地面的腳踝
+                if (leftAnkle && rightAnkle && nose) {
                     const currentMaxY = Math.max(leftAnkle.y, rightAnkle.y);
+                    if (currentMaxY > dynamicGroundY) { dynamicGroundY = currentMaxY; } else { dynamicGroundY -= 0.0005; }
                     
-                    // 動態更新地板線：如果腳踩得更深，更新地板；否則地板緩慢上升(衰減)以適應鏡頭晃動
-                    if (currentMaxY > dynamicGroundY) {
-                        dynamicGroundY = currentMaxY;
-                    } else {
-                        dynamicGroundY -= 0.0005; 
+                    const userHeightCm = parseFloat(document.getElementById('userHeight').value) || 170;
+                    const pixelHeight = Math.abs(((leftAnkle.y + rightAnkle.y) / 2) - nose.y);
+                    const cmPerUnit = userHeightCm / pixelHeight; // 畫面正規化距離與公分的轉換比例
+
+                    // --- 右腳踝 2D 軌跡運算 ---
+                    if (rightHip && nose.visibility > 0.5) {
+                        // 自動偵測跑步方向 (鼻子在右髖的左邊還是右邊)
+                        const runningDirection = nose.x > rightHip.x ? 1 : -1; 
+                        
+                        // X軸：腳踝相對髖關節的水平距離。乘以 runningDirection 確保圖表右側永遠是「身體前方」
+                        const relativeX_cm = (rightAnkle.x - rightHip.x) * runningDirection * cmPerUnit;
+                        
+                        // Y軸：腳踝相對動態地平線的高度 (Y軸向下，所以用 地板Y - 腳踝Y)
+                        const relativeY_cm = (dynamicGroundY - rightAnkle.y) * cmPerUnit;
+                        
+                        trajPoint = { x: relativeX_cm, y: relativeY_cm };
                     }
 
-                    // 畫出參考地板線 (選用，視覺化除錯用)
-                    canvasCtx.beginPath();
-                    canvasCtx.moveTo(0, dynamicGroundY * canvasElement.height);
-                    canvasCtx.lineTo(canvasElement.width, dynamicGroundY * canvasElement.height);
-                    canvasCtx.strokeStyle = 'rgba(231, 76, 60, 0.5)';
-                    canvasCtx.lineWidth = 2;
-                    canvasCtx.stroke();
-
-                    // 判斷左腳是否觸地
+                    // --- GCT 計算 ---
                     const currentLeftGrounded = leftAnkle.y > (dynamicGroundY - groundTolerance);
-                    if (currentLeftGrounded && !isLeftGrounded) {
-                        leftContactStartTime = currentTime; // 剛踩下 (IC)
-                    } else if (!currentLeftGrounded && isLeftGrounded) {
-                        // 剛抬起 (TO)，計算 GCT (毫秒)
+                    if (currentLeftGrounded && !isLeftGrounded) { leftContactStartTime = currentTime; } 
+                    else if (!currentLeftGrounded && isLeftGrounded) {
                         const gctMs = Math.round((currentTime - leftContactStartTime) * 1000);
-                        if (gctMs > 80 && gctMs < 400) { // 過濾極端雜訊 (正常跑步 GCT 約 150~300ms)
-                            document.getElementById('gct_display').innerText = gctMs;
-                        }
+                        if (gctMs > 80 && gctMs < 400) document.getElementById('gct_display').innerText = gctMs;
                     }
                     isLeftGrounded = currentLeftGrounded;
 
-                    // 判斷右腳是否觸地
-                    const currentRightGrounded = rightAnkle.y > (dynamicGroundY - groundTolerance);
-                    if (currentRightGrounded && !isRightGrounded) {
-                        rightContactStartTime = currentTime;
-                    } else if (!currentRightGrounded && isRightGrounded) {
-                        const gctMs = Math.round((currentTime - rightContactStartTime) * 1000);
-                        if (gctMs > 80 && gctMs < 400) {
-                            document.getElementById('gct_display').innerText = gctMs;
-                        }
-                    }
-                    isRightGrounded = currentRightGrounded;
-                }
-
-                // 2. 計算重心 (Center of Mass)
-                if (leftHip && rightHip && leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
-                    const comX = (leftHip.x + rightHip.x) / 2;
-                    const comY = (leftHip.y + rightHip.y) / 2;
-
-                    canvasCtx.beginPath(); canvasCtx.arc(comX * canvasElement.width, comY * canvasElement.height, 8, 0, 2 * Math.PI);
-                    canvasCtx.fillStyle = '#FFC300'; canvasCtx.fill(); canvasCtx.lineWidth = 2; canvasCtx.strokeStyle = '#FFF'; canvasCtx.stroke();
-
-                    if (nose && leftAnkle && rightAnkle) {
-                        const userHeightCm = parseFloat(document.getElementById('userHeight').value) || 170;
-                        const pixelHeight = Math.abs(((leftAnkle.y + rightAnkle.y) / 2) - nose.y);
-                        const cmPerUnit = userHeightCm / pixelHeight;
-
+                    // --- 重心、角度與跨距 ---
+                    if (leftHip && rightHip) {
+                        const comY = (leftHip.y + rightHip.y) / 2;
                         comYCm = (1 - comY) * cmPerUnit;
                         if (comYCm > currentStepMaxY) currentStepMaxY = comYCm;
                         if (comYCm < currentStepMinY) currentStepMinY = comYCm;
                     }
-                }
-
-                // 3. 計算膝關節角度
-                if (rightHip && rightKnee && rightAnkle && rightHip.visibility > 0.5) {
-                    currentAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
-                }
-
-                // 4. 步頻與跨距運算
-                if (nose && leftAnkle && rightAnkle && leftAnkle.visibility > 0.6 && rightAnkle.visibility > 0.6) {
-                    const userHeightCm = parseFloat(document.getElementById('userHeight').value) || 170;
-                    const pixelHeight = Math.abs(((leftAnkle.y + rightAnkle.y) / 2) - nose.y);
-                    const cmPerUnit = userHeightCm / pixelHeight;
+                    if (rightKnee && rightHip) currentAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+                    
                     const currentDist = Math.sqrt(Math.pow(leftAnkle.x - rightAnkle.x, 2) + Math.pow(leftAnkle.y - rightAnkle.y, 2));
                     currentStrideCm = currentDist * cmPerUnit;
 
-                    if (currentDist > prevAnkleDist) {
-                        isIncreasing = true;
-                    } else if (currentDist < prevAnkleDist && isIncreasing) {
+                    if (currentDist > prevAnkleDist) { isIncreasing = true; } 
+                    else if (currentDist < prevAnkleDist && isIncreasing) {
                         isIncreasing = false;
                         if (currentTime - lastStepTime > 0.25) {
                             const strideCm = prevAnkleDist * cmPerUnit;
                             if (strideCm > 30) {
                                 stepCount++; strideHistory.push(strideCm);
                                 if (stepCount === 1) firstStepTime = currentTime;
-                                
-                                let cadence = 0;
-                                if (stepCount > 1) cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
-
+                                let cadence = 0; if (stepCount > 1) cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
                                 if (currentStepMaxY !== -Infinity && currentStepMinY !== Infinity) {
                                     document.getElementById('vertical_oscillation').innerText = (currentStepMaxY - currentStepMinY).toFixed(1);
                                 }
                                 currentStepMaxY = comYCm; currentStepMinY = comYCm;
-
-                                document.getElementById('step_count').innerText = stepCount;
-                                document.getElementById('current_stride').innerText = strideCm.toFixed(1);
+                                document.getElementById('avg_stride').innerText = (strideHistory.reduce((a, b) => a + b, 0) / strideHistory.length).toFixed(1);
                                 document.getElementById('cadence').innerText = cadence;
                                 lastStepTime = currentTime;
                             }
@@ -261,55 +221,50 @@
                     prevAnkleDist = currentDist;
                 }
 
-                // 5. 更新圖表
-                if (currentAngle !== null && currentStrideCm !== null && comYCm !== null) {
+                // --- 圖表更新 ---
+                if (currentAngle !== null && currentStrideCm !== null && comYCm !== null && trajPoint !== null) {
                     const timeLabel = currentTime.toFixed(2);
                     comChart.data.labels.push(timeLabel); comChart.data.datasets[0].data.push(comYCm);
                     angleChart.data.labels.push(timeLabel); angleChart.data.datasets[0].data.push(currentAngle);
                     strideChart.data.labels.push(timeLabel); strideChart.data.datasets[0].data.push(currentStrideCm);
+                    
+                    // 軌跡圖推入 XY 座標點
+                    trajChart.data.datasets[0].data.push(trajPoint);
 
                     if (angleChart.data.labels.length > maxDataPoints) {
-                        comChart.data.labels.shift(); comChart.data.datasets[0].data.shift();
-                        angleChart.data.labels.shift(); angleChart.data.datasets[0].data.shift();
-                        strideChart.data.labels.shift(); strideChart.data.datasets[0].data.shift();
+                        [comChart, angleChart, strideChart].forEach(c => { c.data.labels.shift(); c.data.datasets[0].data.shift(); });
                     }
-                    comChart.update(); angleChart.update(); strideChart.update();
+                    // 軌跡圖保留的點數稍微少一點，確保畫面上只顯示最新的一個完整圓，不會變成一團毛線
+                    if (trajChart.data.datasets[0].data.length > trajMaxPoints) {
+                        trajChart.data.datasets[0].data.shift();
+                    }
+
+                    comChart.update(); angleChart.update(); strideChart.update(); trajChart.update();
                 }
             }
             canvasCtx.restore();
         });
 
-        // ================= 攝影機與影片控制 =================
+        // 攝影機與影片控制
         const camera = new Camera(videoElement, { onFrame: async () => { if(cameraActive) await pose.send({image: videoElement}); }, width: 640, height: 480 });
-
         startBtn.addEventListener('click', () => {
-            if (!videoElement.paused) videoElement.pause();
-            cancelAnimationFrame(animationFrameId);
+            if (!videoElement.paused) videoElement.pause(); cancelAnimationFrame(animationFrameId);
             if (!cameraActive) { resetData(); camera.start(); startBtn.innerText = "關閉攝影機"; cameraActive = true; } 
             else { camera.stop(); videoElement.srcObject = null; startBtn.innerText = "啟動攝影機"; cameraActive = false; canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height); }
         });
-
         uploadBtn.addEventListener('click', () => videoUpload.click());
-
         videoUpload.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
+            const file = event.target.files[0]; if (!file) return;
             if (cameraActive) { camera.stop(); startBtn.innerText = "啟動攝影機"; cameraActive = false; }
             resetData(); videoElement.srcObject = null; videoElement.src = URL.createObjectURL(file); videoElement.load();
         });
-
         async function processVideoFrame() {
-            if (!videoElement.paused && !videoElement.ended) {
-                await pose.send({image: videoElement});
-                animationFrameId = requestAnimationFrame(processVideoFrame);
-            }
+            if (!videoElement.paused && !videoElement.ended) { await pose.send({image: videoElement}); animationFrameId = requestAnimationFrame(processVideoFrame); }
         }
-
         videoElement.addEventListener('play', processVideoFrame);
         videoElement.addEventListener('loadeddata', () => {
             const ratio = videoElement.videoWidth / videoElement.videoHeight;
-            canvasElement.width = 640; canvasElement.height = 640 / ratio;
-            videoElement.play();
+            canvasElement.width = 640; canvasElement.height = 640 / ratio; videoElement.play();
         });
     </script>
 </body>
