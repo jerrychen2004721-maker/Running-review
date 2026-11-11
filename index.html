@@ -14,18 +14,26 @@
         video { display: none; } /* 隱藏原始影片，只顯示畫好骨架的 Canvas */
         canvas { background-color: #000; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); max-width: 100%; height: auto; }
         #dashboard { margin-top: 15px; font-size: 1.2em; font-weight: bold; color: #333; }
-        button { padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; margin-bottom: 10px; }
-        button:hover { background-color: #0056b3; }
+        .btn-group { margin-bottom: 15px; }
+        button { padding: 10px 20px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 5px; margin: 0 5px; }
+        #startBtn { background-color: #28a745; }
+        #startBtn:hover { background-color: #218838; }
+        #uploadBtn { background-color: #007bff; }
+        #uploadBtn:hover { background-color: #0056b3; }
     </style>
 </head>
 <body>
 
     <h2>跑者矢狀面動態分析</h2>
-    <button id="startBtn">啟動攝影機</button>
-    <br>
+    <div class="btn-group">
+        <button id="startBtn">啟動攝影機</button>
+        <button id="uploadBtn">匯入影片</button>
+        <!-- 隱藏實際的 file input，透過按鈕觸發 -->
+        <input type="file" id="videoUpload" accept="video/mp4,video/x-m4v,video/*" style="display: none;">
+    </div>
     
     <div class="container">
-        <video id="input_video" width="640" height="480" autoplay playsinline></video>
+        <video id="input_video" width="640" height="480" playsinline></video>
         <canvas id="output_canvas" width="640" height="480"></canvas>
     </div>
     
@@ -37,10 +45,14 @@
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
+        
         const startBtn = document.getElementById('startBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const videoUpload = document.getElementById('videoUpload');
         const kneeAngleDisplay = document.getElementById('knee_angle');
 
         let cameraActive = false;
+        let animationFrameId;
 
         // 計算空間中三點夾角的函數 (回傳角度 0~180)
         function calculateAngle(a, b, c) {
@@ -58,8 +70,8 @@
         }});
 
         pose.setOptions({
-            modelComplexity: 1, // 0=輕量, 1=全卷積, 2=高精度。網頁建議用 1
-            smoothLandmarks: true, // 開啟平滑化，減少畫面抖動
+            modelComplexity: 1, 
+            smoothLandmarks: true,
             enableSegmentation: false,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
@@ -76,7 +88,6 @@
                 drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
                 drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
 
-                // 擷取右側髖部(24)、右膝(26)、右踝(28)的座標
                 const rightHip = results.poseLandmarks[24];
                 const rightKnee = results.poseLandmarks[26];
                 const rightAnkle = results.poseLandmarks[28];
@@ -86,7 +97,6 @@
                     const angle = calculateAngle(rightHip, rightKnee, rightAnkle);
                     kneeAngleDisplay.innerText = angle;
 
-                    // 將角度文字顯示在畫面的膝蓋位置旁
                     canvasCtx.font = "24px Arial";
                     canvasCtx.fillStyle = "yellow";
                     canvasCtx.fillText(angle + "°", rightKnee.x * canvasElement.width + 15, rightKnee.y * canvasElement.height);
@@ -95,29 +105,82 @@
             canvasCtx.restore();
         });
 
-        // 啟動與關閉攝影機的邏輯
+        // ================= 攝影機模式 =================
         const camera = new Camera(videoElement, {
             onFrame: async () => {
-                await pose.send({image: videoElement});
+                if(cameraActive) await pose.send({image: videoElement});
             },
             width: 640,
             height: 480
         });
 
         startBtn.addEventListener('click', () => {
+            // 若正在播放影片，先暫停影片
+            if (!videoElement.paused) videoElement.pause();
+            cancelAnimationFrame(animationFrameId);
+
             if (!cameraActive) {
                 camera.start();
                 startBtn.innerText = "關閉攝影機";
                 cameraActive = true;
             } else {
                 camera.stop();
-                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
                 startBtn.innerText = "啟動攝影機";
                 cameraActive = false;
                 canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
                 kneeAngleDisplay.innerText = "0";
             }
         });
+
+        // ================= 匯入影片模式 =================
+        // 綁定按鈕點擊事件至隱藏的 input
+        uploadBtn.addEventListener('click', () => {
+            videoUpload.click();
+        });
+
+        // 當使用者選擇影片檔案後
+        videoUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 關閉攝影機
+            if (cameraActive) {
+                camera.stop();
+                startBtn.innerText = "啟動攝影機";
+                cameraActive = false;
+            }
+
+            // 讀取本地端影片檔案並載入
+            const fileURL = URL.createObjectURL(file);
+            videoElement.srcObject = null; // 清除攝影機串流
+            videoElement.src = fileURL;
+            videoElement.load();
+        });
+
+        // 非同步迴圈：將影片逐格送入模型分析
+        async function processVideoFrame() {
+            if (!videoElement.paused && !videoElement.ended) {
+                await pose.send({image: videoElement});
+                // 請求下一幀繼續分析
+                animationFrameId = requestAnimationFrame(processVideoFrame);
+            }
+        }
+
+        // 當影片準備好並開始播放時，啟動分析迴圈
+        videoElement.addEventListener('play', () => {
+            processVideoFrame();
+        });
+
+        // 自動播放載入的影片
+        videoElement.addEventListener('loadeddata', () => {
+            // 根據影片比例調整 Canvas 尺寸，避免畫面變形
+            const ratio = videoElement.videoWidth / videoElement.videoHeight;
+            canvasElement.width = 640;
+            canvasElement.height = 640 / ratio;
+            videoElement.play();
+        });
+
     </script>
 </body>
 </html>
