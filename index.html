@@ -32,7 +32,7 @@
         .chart-box { height: 180px; position: relative; }
         @media (max-width: 768px) { .charts-container { grid-template-columns: 1fr; } }
 
-        /* 數據儀表板移至下方並調整間距 */
+        /* 數據儀表板 */
         #dashboard { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 25px; margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto;}
         .card { background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex: 1; min-width: 110px;}
         .card .title { font-size: 0.85em; color: #666; }
@@ -45,7 +45,6 @@
 
     <h2>跑者矢狀面動態分析 - 腳踝軌跡與步態週期</h2>
     
-    <!-- 控制區塊 (置頂) -->
     <div class="controls">
         <div class="btn-group">
             <button id="startBtn">啟動攝影機</button>
@@ -57,7 +56,6 @@
         </div>
     </div>
     
-    <!-- 主要視覺佈局：影片與圖表 (置中) -->
     <div class="main-layout">
         <div class="video-container">
             <video id="input_video" width="640" height="480" playsinline></video>
@@ -71,7 +69,6 @@
         </div>
     </div>
 
-    <!-- 數據儀表板 (移至最下方) -->
     <div id="dashboard">
         <div class="card gct-card"><div class="title">觸地時間 GCT</div><div class="value"><span id="gct_display">0</span><span class="unit"> ms</span></div></div>
         <div class="card"><div class="title">單步垂直振幅</div><div class="value"><span id="vertical_oscillation">0.0</span><span class="unit"> cm</span></div></div>
@@ -80,7 +77,6 @@
     </div>
 
     <script>
-        // ================= JavaScript 邏輯保持不變 =================
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
@@ -145,10 +141,20 @@
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.poseLandmarks) {
-                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 1});
+                // ================= 修改核心：隱藏臉部節點 =================
+                // 複製一份座標點專供畫圖使用。將索引值 0~10 (臉部特徵如眼、耳、鼻、嘴) 的能見度設為 0
+                const drawingLandmarks = results.poseLandmarks.map((lm, index) => {
+                    return index <= 10 ? { ...lm, visibility: 0 } : lm;
+                });
 
-                const nose = results.poseLandmarks[0]; const leftHip = results.poseLandmarks[23]; const rightHip = results.poseLandmarks[24];
+                // 使用處理過的 drawingLandmarks 來畫線條與圓點
+                drawConnectors(canvasCtx, drawingLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                drawLandmarks(canvasCtx, drawingLandmarks, {color: '#FF0000', lineWidth: 1});
+                // ========================================================
+
+                // 計算依然使用原始的 results.poseLandmarks，確保鼻子座標 (0) 可以用來換算身高比例
+                const nose = results.poseLandmarks[0]; 
+                const leftHip = results.poseLandmarks[23]; const rightHip = results.poseLandmarks[24];
                 const rightKnee = results.poseLandmarks[26]; const leftAnkle = results.poseLandmarks[27]; const rightAnkle = results.poseLandmarks[28];
 
                 const currentTime = cameraActive ? performance.now() / 1000 : videoElement.currentTime;
