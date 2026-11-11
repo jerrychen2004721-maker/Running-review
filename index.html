@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>跑步姿態分析系統</title>
+    <!-- 引入 MediaPipe Pose 與繪圖套件 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { position: relative; display: inline-block; }
+        video { display: none; } /* 隱藏原始影片，只顯示畫好骨架的 Canvas */
+        canvas { background-color: #000; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); max-width: 100%; height: auto; }
+        #dashboard { margin-top: 15px; font-size: 1.2em; font-weight: bold; color: #333; }
+        button { padding: 10px 20px; font-size: 1em; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; margin-bottom: 10px; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <h2>跑者矢狀面動態分析</h2>
+    <button id="startBtn">啟動攝影機</button>
+    <br>
+    
+    <div class="container">
+        <video id="input_video" width="640" height="480" autoplay playsinline></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+    </div>
+    
+    <div id="dashboard">
+        右膝屈曲角度: <span id="knee_angle">0</span>°
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const kneeAngleDisplay = document.getElementById('knee_angle');
+
+        let cameraActive = false;
+
+        // 計算空間中三點夾角的函數 (回傳角度 0~180)
+        function calculateAngle(a, b, c) {
+            const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+            let angle = Math.abs(radians * 180.0 / Math.PI);
+            if (angle > 180.0) {
+                angle = 360 - angle;
+            }
+            return angle.toFixed(1);
+        }
+
+        // 初始化 MediaPipe Pose 模型
+        const pose = new Pose({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+        }});
+
+        pose.setOptions({
+            modelComplexity: 1, // 0=輕量, 1=全卷積, 2=高精度。網頁建議用 1
+            smoothLandmarks: true, // 開啟平滑化，減少畫面抖動
+            enableSegmentation: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        // 處理模型回傳結果
+        pose.onResults((results) => {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                // 畫出骨架與節點
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
+
+                // 擷取右側髖部(24)、右膝(26)、右踝(28)的座標
+                const rightHip = results.poseLandmarks[24];
+                const rightKnee = results.poseLandmarks[26];
+                const rightAnkle = results.poseLandmarks[28];
+
+                // 計算膝關節角度
+                if (rightHip && rightKnee && rightAnkle && rightHip.visibility > 0.5) {
+                    const angle = calculateAngle(rightHip, rightKnee, rightAnkle);
+                    kneeAngleDisplay.innerText = angle;
+
+                    // 將角度文字顯示在畫面的膝蓋位置旁
+                    canvasCtx.font = "24px Arial";
+                    canvasCtx.fillStyle = "yellow";
+                    canvasCtx.fillText(angle + "°", rightKnee.x * canvasElement.width + 15, rightKnee.y * canvasElement.height);
+                }
+            }
+            canvasCtx.restore();
+        });
+
+        // 啟動與關閉攝影機的邏輯
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await pose.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+
+        startBtn.addEventListener('click', () => {
+            if (!cameraActive) {
+                camera.start();
+                startBtn.innerText = "關閉攝影機";
+                cameraActive = true;
+            } else {
+                camera.stop();
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                startBtn.innerText = "啟動攝影機";
+                cameraActive = false;
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                kneeAngleDisplay.innerText = "0";
+            }
+        });
+    </script>
+</body>
+</html>
