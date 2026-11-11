@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析系統 - 步頻與跨距分析</title>
+    <title>跑步姿態分析系統 - 即時數據圖表</title>
+    <!-- 引入 MediaPipe 與 Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; background-color: #f4f4f9; margin: 0; padding: 20px; }
-        .container { position: relative; display: inline-block; margin-top: 10px; }
+        .main-layout { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; align-items: flex-start; }
+        .video-container { position: relative; display: inline-block; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         video { display: none; } 
-        canvas { background-color: #000; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); max-width: 100%; height: auto; }
+        canvas { background-color: #000; border-radius: 8px; max-width: 100%; height: auto; }
         
-        .controls { background: white; padding: 15px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .controls { background: white; padding: 15px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; width: 100%; max-width: 800px; }
         .btn-group button { padding: 10px 20px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 5px; margin: 0 5px; }
         #startBtn { background-color: #28a745; }
         #startBtn:hover { background-color: #218838; }
@@ -23,11 +26,14 @@
         .calibration { margin-top: 15px; font-size: 1.1em; }
         .calibration input { font-size: 1em; width: 70px; text-align: center; margin-left: 10px; }
 
-        #dashboard { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 15px; }
-        .card { background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-width: 120px; }
+        #dashboard { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; }
+        .card { background: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); min-width: 110px; }
         .card .title { font-size: 0.9em; color: #666; }
         .card .value { font-size: 1.5em; font-weight: bold; color: #333; margin-top: 5px; }
         .card .unit { font-size: 0.8em; color: #888; }
+
+        .charts-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
+        .chart-box { height: 200px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -41,38 +47,32 @@
             <input type="file" id="videoUpload" accept="video/mp4,video/x-m4v,video/*" style="display: none;">
         </div>
         <div class="calibration">
-            <label>設定跑者真實身高 (校正跨距用): 
-                <input type="number" id="userHeight" value="170"> cm
-            </label>
+            <label>設定跑者真實身高 (校正跨距用): <input type="number" id="userHeight" value="170"> cm</label>
         </div>
-    </div>
-    <br>
-    
-    <div class="container">
-        <video id="input_video" width="640" height="480" playsinline></video>
-        <canvas id="output_canvas" width="640" height="480"></canvas>
     </div>
     
     <div id="dashboard">
-        <div class="card">
-            <div class="title">右膝最大屈曲</div>
-            <div class="value"><span id="knee_angle">0</span><span class="unit">°</span></div>
+        <div class="card"><div class="title">平均步頻</div><div class="value"><span id="cadence">0</span><span class="unit"> SPM</span></div></div>
+        <div class="card"><div class="title">單次跨距</div><div class="value"><span id="current_stride">0.0</span><span class="unit"> cm</span></div></div>
+        <div class="card"><div class="title">平均跨距</div><div class="value"><span id="avg_stride">0.0</span><span class="unit"> cm</span></div></div>
+        <div class="card"><div class="title">總步數</div><div class="value"><span id="step_count">0</span><span class="unit"> 步</span></div></div>
+    </div>
+
+    <div class="main-layout">
+        <!-- 影像區塊 -->
+        <div class="video-container">
+            <video id="input_video" width="640" height="480" playsinline></video>
+            <canvas id="output_canvas" width="640" height="480"></canvas>
         </div>
-        <div class="card">
-            <div class="title">平均步頻</div>
-            <div class="value"><span id="cadence">0</span><span class="unit"> SPM</span></div>
-        </div>
-        <div class="card">
-            <div class="title">單次跨距</div>
-            <div class="value"><span id="current_stride">0.0</span><span class="unit"> cm</span></div>
-        </div>
-        <div class="card">
-            <div class="title">平均跨距</div>
-            <div class="value"><span id="avg_stride">0.0</span><span class="unit"> cm</span></div>
-        </div>
-        <div class="card">
-            <div class="title">總步數</div>
-            <div class="value"><span id="step_count">0</span><span class="unit"> 步</span></div>
+
+        <!-- 圖表區塊 -->
+        <div class="charts-container">
+            <div class="chart-box">
+                <canvas id="angleChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <canvas id="strideChart"></canvas>
+            </div>
         </div>
     </div>
 
@@ -80,16 +80,13 @@
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
-        
         const startBtn = document.getElementById('startBtn');
         const uploadBtn = document.getElementById('uploadBtn');
         const videoUpload = document.getElementById('videoUpload');
         
-        // 狀態變數
         let cameraActive = false;
         let animationFrameId;
         
-        // 步態分析變數
         let prevAnkleDist = 0;
         let isIncreasing = false;
         let lastStepTime = 0;
@@ -97,18 +94,38 @@
         let stepCount = 0;
         let strideHistory = [];
 
+        // ================= 圖表初始化 (Chart.js) =================
+        const maxDataPoints = 90; // 畫面上最多保留幾筆資料 (約3秒的60fps影片)
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false, // 關閉動畫提升即時渲染效能
+            scales: { x: { display: false } }, // 隱藏擁擠的 X 軸時間標籤
+            elements: { point: { radius: 0 } } // 隱藏資料點，只畫線
+        };
+
+        const angleChart = new Chart(document.getElementById('angleChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: '右膝關節角度 (°)', data: [], borderColor: '#FF5733', borderWidth: 2, tension: 0.3 }] },
+            options: { ...chartOptions, scales: { y: { suggestedMin: 60, suggestedMax: 180 }, x: { display: false } } }
+        });
+
+        const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#33A1FF', borderWidth: 2, tension: 0.3 }] },
+            options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } }
+        });
+
         function resetData() {
-            prevAnkleDist = 0;
-            isIncreasing = false;
-            lastStepTime = 0;
-            firstStepTime = 0;
-            stepCount = 0;
-            strideHistory = [];
+            prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0; strideHistory = [];
             document.getElementById('step_count').innerText = "0";
             document.getElementById('current_stride').innerText = "0.0";
             document.getElementById('avg_stride').innerText = "0.0";
             document.getElementById('cadence').innerText = "0";
-            document.getElementById('knee_angle').innerText = "0";
+            
+            // 清空圖表資料
+            angleChart.data.labels = []; angleChart.data.datasets[0].data = []; angleChart.update();
+            strideChart.data.labels = []; strideChart.data.datasets[0].data = []; strideChart.update();
         }
 
         function calculateAngle(a, b, c) {
@@ -117,13 +134,9 @@
             return angle > 180.0 ? (360 - angle).toFixed(1) : angle.toFixed(1);
         }
 
+        // ================= MediaPipe Pose 設定 =================
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-        pose.setOptions({
-            modelComplexity: 1, 
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
         pose.onResults((results) => {
             canvasCtx.save();
@@ -140,116 +153,97 @@
                 const rightAnkle = results.poseLandmarks[28];
                 const leftAnkle = results.poseLandmarks[27];
 
+                const currentTime = cameraActive ? performance.now() / 1000 : videoElement.currentTime;
+                let currentAngle = null;
+                let currentStrideCm = null;
+
                 // 1. 計算膝關節角度
                 if (rightHip && rightKnee && rightAnkle && rightHip.visibility > 0.5) {
-                    const angle = calculateAngle(rightHip, rightKnee, rightAnkle);
-                    document.getElementById('knee_angle').innerText = angle;
+                    currentAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
                 }
 
-                // 2. 步頻與跨距分析核心邏輯
+                // 2. 步頻與跨距運算
                 if (nose && leftAnkle && rightAnkle && leftAnkle.visibility > 0.6 && rightAnkle.visibility > 0.6) {
-                    
-                    // A. 建立畫面比例尺 (利用身高)
                     const userHeightCm = parseFloat(document.getElementById('userHeight').value) || 170;
-                    const avgAnkleY = (leftAnkle.y + rightAnkle.y) / 2;
-                    const pixelHeight = Math.abs(avgAnkleY - nose.y);
-                    const cmPerUnit = userHeightCm / pixelHeight; // 1 畫面單位 = 多少公分
+                    const pixelHeight = Math.abs(((leftAnkle.y + rightAnkle.y) / 2) - nose.y);
+                    const cmPerUnit = userHeightCm / pixelHeight;
 
-                    // B. 計算左右腳踝的距離 (2D 歐式距離，因側拍時 X 軸為主，加入 Y 軸增加穩定度)
                     const currentDist = Math.sqrt(Math.pow(leftAnkle.x - rightAnkle.x, 2) + Math.pow(leftAnkle.y - rightAnkle.y, 2));
-                    
-                    // 根據模式取得當前時間 (影片用 currentTime 較準確，攝影機用系統時間)
-                    const currentTime = cameraActive ? performance.now() / 1000 : videoElement.currentTime;
+                    currentStrideCm = currentDist * cmPerUnit;
 
-                    // C. 找尋最大步幅反轉點 (Peak Detection)
                     if (currentDist > prevAnkleDist) {
                         isIncreasing = true;
                     } else if (currentDist < prevAnkleDist && isIncreasing) {
-                        // 趨勢反轉，代表腳張到最開準備收回 -> 判定為一步
                         isIncreasing = false;
-
-                        // 加入冷卻時間 (0.25秒) 過濾雜訊，防止單步被重複計算 (240 SPM 極限)
                         if (currentTime - lastStepTime > 0.25) {
-                            
-                            // 換算跨距 (公分)
                             const strideCm = prevAnkleDist * cmPerUnit;
-                            
-                            // 忽略小於 30cm 的微小抖動
                             if (strideCm > 30) {
                                 stepCount++;
                                 strideHistory.push(strideCm);
-
                                 if (stepCount === 1) firstStepTime = currentTime;
                                 
-                                // 計算步頻 SPM (Steps Per Minute)
                                 let cadence = 0;
                                 if (stepCount > 1) {
-                                    const timeElapsed = currentTime - firstStepTime;
-                                    cadence = Math.round((stepCount / timeElapsed) * 60);
+                                    cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
                                 }
+                                const avgStride = (strideHistory.reduce((a, b) => a + b, 0) / strideHistory.length).toFixed(1);
 
-                                // 計算平均跨距
-                                const sumStrides = strideHistory.reduce((a, b) => a + b, 0);
-                                const avgStride = (sumStrides / strideHistory.length).toFixed(1);
-
-                                // 更新儀表板
                                 document.getElementById('step_count').innerText = stepCount;
                                 document.getElementById('current_stride').innerText = strideCm.toFixed(1);
                                 document.getElementById('avg_stride').innerText = avgStride;
                                 document.getElementById('cadence').innerText = cadence;
-                                
                                 lastStepTime = currentTime;
                             }
                         }
                     }
                     prevAnkleDist = currentDist;
                 }
+
+                // 3. 更新 Chart.js 圖表
+                if (currentAngle !== null && currentStrideCm !== null) {
+                    const timeLabel = currentTime.toFixed(2);
+                    
+                    angleChart.data.labels.push(timeLabel);
+                    angleChart.data.datasets[0].data.push(currentAngle);
+                    
+                    strideChart.data.labels.push(timeLabel);
+                    strideChart.data.datasets[0].data.push(currentStrideCm);
+
+                    // 保持陣列長度，形成滑動視窗效果 (Moving Window)
+                    if (angleChart.data.labels.length > maxDataPoints) {
+                        angleChart.data.labels.shift();
+                        angleChart.data.datasets[0].data.shift();
+                        strideChart.data.labels.shift();
+                        strideChart.data.datasets[0].data.shift();
+                    }
+                    angleChart.update();
+                    strideChart.update();
+                }
             }
             canvasCtx.restore();
         });
 
-        // ================= 攝影機模式 =================
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { if(cameraActive) await pose.send({image: videoElement}); },
-            width: 640, height: 480
-        });
+        // ================= 攝影機與影片控制 =================
+        const camera = new Camera(videoElement, { onFrame: async () => { if(cameraActive) await pose.send({image: videoElement}); }, width: 640, height: 480 });
 
         startBtn.addEventListener('click', () => {
             if (!videoElement.paused) videoElement.pause();
             cancelAnimationFrame(animationFrameId);
-
             if (!cameraActive) {
-                resetData();
-                camera.start();
-                startBtn.innerText = "關閉攝影機";
-                cameraActive = true;
+                resetData(); camera.start(); startBtn.innerText = "關閉攝影機"; cameraActive = true;
             } else {
-                camera.stop();
-                videoElement.srcObject = null;
-                startBtn.innerText = "啟動攝影機";
-                cameraActive = false;
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                camera.stop(); videoElement.srcObject = null; startBtn.innerText = "啟動攝影機"; cameraActive = false; canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             }
         });
 
-        // ================= 匯入影片模式 =================
         uploadBtn.addEventListener('click', () => videoUpload.click());
 
         videoUpload.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (!file) return;
-
-            if (cameraActive) {
-                camera.stop();
-                startBtn.innerText = "啟動攝影機";
-                cameraActive = false;
-            }
-            
-            resetData(); // 載入新影片時歸零數據
-            const fileURL = URL.createObjectURL(file);
-            videoElement.srcObject = null;
-            videoElement.src = fileURL;
-            videoElement.load();
+            if (cameraActive) { camera.stop(); startBtn.innerText = "啟動攝影機"; cameraActive = false; }
+            resetData(); 
+            videoElement.srcObject = null; videoElement.src = URL.createObjectURL(file); videoElement.load();
         });
 
         async function processVideoFrame() {
@@ -260,11 +254,9 @@
         }
 
         videoElement.addEventListener('play', processVideoFrame);
-
         videoElement.addEventListener('loadeddata', () => {
             const ratio = videoElement.videoWidth / videoElement.videoHeight;
-            canvasElement.width = 640;
-            canvasElement.height = 640 / ratio;
+            canvasElement.width = 640; canvasElement.height = 640 / ratio;
             videoElement.play();
         });
     </script>
