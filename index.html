@@ -117,12 +117,11 @@
         let dynamicGroundY = 0; const groundTolerance = 0.015; 
         let isLeftGrounded = false; let isRightGrounded = false; let leftContactStartTime = 0; let rightContactStartTime = 0;
         
-        // 追蹤尚未完成 GCT 運算的表格欄位 ID
-        let pendingLeftCellId = null; 
-        let pendingRightCellId = null;
+        let pendingLeftCellId = null; let pendingRightCellId = null;
+        let stepMinKneeAngle = 180; let stepMinHipAngle = 180;
 
-        let stepMinKneeAngle = 180;
-        let stepMinHipAngle = 180;
+        // ================= 新增：強制交替邏輯變數 =================
+        let nextFootIsLeft = null; 
 
         // ================= 圖表初始化 =================
         const maxDataPoints = 90; const trajMaxPoints = 50;
@@ -138,6 +137,8 @@
             currentStepMaxY = -Infinity; currentStepMinY = Infinity; dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
             pendingLeftCellId = null; pendingRightCellId = null; stepMinKneeAngle = 180; stepMinHipAngle = 180;
             
+            nextFootIsLeft = null; // 重置交替邏輯
+
             document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
             document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
             stepTableBody.innerHTML = ""; 
@@ -180,23 +181,19 @@
                     const pixelHeight = Math.abs(((leftAnkle.y + rightAnkle.y) / 2) - nose.y);
                     const cmPerUnit = userHeightCm / pixelHeight;
 
-                    // 自動判斷跑步前進方向 (1: 往右, -1: 往左)
                     const runningDirection = nose.x > ((leftHip.x + rightHip.x)/2) ? 1 : -1;
 
                     if (rightHip && nose.visibility > 0.5) {
                         trajPoint = { x: (rightAnkle.x - rightHip.x) * runningDirection * cmPerUnit, y: (dynamicGroundY - rightAnkle.y) * cmPerUnit };
                     }
 
-                    // --- GCT 計算與非同步表格寫入 ---
-                    
-                    // 左腳 GCT 結算
+                    // --- GCT 計算 ---
                     const currentLeftGrounded = leftAnkle.y > (dynamicGroundY - groundTolerance);
                     if (currentLeftGrounded && !isLeftGrounded) { leftContactStartTime = currentTime; } 
                     else if (!currentLeftGrounded && isLeftGrounded) {
                         const gctMs = Math.round((currentTime - leftContactStartTime) * 1000);
                         if (gctMs > 80 && gctMs < 400) { 
                             document.getElementById('gct_display').innerText = gctMs; 
-                            // 填入表格中正在等待的左腳 GCT 欄位
                             if (pendingLeftCellId) {
                                 const cell = document.getElementById(pendingLeftCellId);
                                 if (cell) { cell.innerText = gctMs; cell.classList.remove('calculating'); cell.classList.add('foot-l'); }
@@ -206,14 +203,12 @@
                     }
                     isLeftGrounded = currentLeftGrounded;
 
-                    // 右腳 GCT 結算
                     const currentRightGrounded = rightAnkle.y > (dynamicGroundY - groundTolerance);
                     if (currentRightGrounded && !isRightGrounded) { rightContactStartTime = currentTime; } 
                     else if (!currentRightGrounded && isRightGrounded) {
                         const gctMs = Math.round((currentTime - rightContactStartTime) * 1000);
                         if (gctMs > 80 && gctMs < 400) { 
                             document.getElementById('gct_display').innerText = gctMs; 
-                            // 填入表格中正在等待的右腳 GCT 欄位
                             if (pendingRightCellId) {
                                 const cell = document.getElementById(pendingRightCellId);
                                 if (cell) { cell.innerText = gctMs; cell.classList.remove('calculating'); cell.classList.add('foot-r'); }
@@ -255,25 +250,32 @@
                                 let cadence = 0; if (stepCount > 1) cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
                                 if (currentStepMaxY !== -Infinity && currentStepMinY !== Infinity) { document.getElementById('vertical_oscillation').innerText = (currentStepMaxY - currentStepMinY).toFixed(1); }
                                 
-                                // === 判斷是左腳還是右腳觸地 (跨步在前方的那隻腳) ===
-                                // X軸在畫面上由左至右遞增。若向右跑(1)，前腳X會大於後腳X。
-                                const leftIsFront = ((leftAnkle.x - rightAnkle.x) * runningDirection) > 0;
-                                
-                                let footLabel = '';
-                                let footClass = '';
-                                const currentGctCellId = `gct_cell_${stepCount}`;
+                                // ================= 新增：強制交替腳步判定 =================
+                                let isLeftFootStep = false;
 
-                                if (leftIsFront) {
-                                    footLabel = '左腳 (L)';
-                                    footClass = 'foot-l';
-                                    pendingLeftCellId = currentGctCellId; // 登記此欄位等待左腳離地更新
+                                if (stepCount === 1) {
+                                    // 第一步：依賴實際空間 X 座標判斷 (跨步在前方的那隻腳)
+                                    isLeftFootStep = ((leftAnkle.x - rightAnkle.x) * runningDirection) > 0;
                                 } else {
-                                    footLabel = '右腳 (R)';
-                                    footClass = 'foot-r';
-                                    pendingRightCellId = currentGctCellId; // 登記此欄位等待右腳離地更新
+                                    // 第二步開始：無視畫面座標，強制依照前一步的預測交替
+                                    isLeftFootStep = nextFootIsLeft;
                                 }
 
-                                // 寫入表格 (GCT 欄位預設為計算中)
+                                // 準備下一次的交替 (這次是左腳，下次就是右腳，反之亦然)
+                                nextFootIsLeft = !isLeftFootStep;
+
+                                let footLabel = ''; let footClass = '';
+                                const currentGctCellId = `gct_cell_${stepCount}`;
+
+                                if (isLeftFootStep) {
+                                    footLabel = '左腳 (L)'; footClass = 'foot-l';
+                                    pendingLeftCellId = currentGctCellId; 
+                                } else {
+                                    footLabel = '右腳 (R)'; footClass = 'foot-r';
+                                    pendingRightCellId = currentGctCellId; 
+                                }
+                                // ========================================================
+
                                 const row = document.createElement('tr');
                                 row.innerHTML = `
                                     <td>${stepCount}</td>
