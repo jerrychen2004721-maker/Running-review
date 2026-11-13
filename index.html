@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 影片時間軸與平均數據</title>
+    <title>跑步姿態分析 - GCT與離地高度交叉分析</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
@@ -31,8 +31,10 @@
         input[type="range"] { flex-grow: 1; cursor: pointer; }
         .time-display { font-family: monospace; font-size: 1.1em; color: #333; min-width: 110px; text-align: right; }
 
+        /* 圖表網格 */
         .charts-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; max-width: 800px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 0 auto; }
         .chart-box { height: 180px; position: relative; }
+        .chart-full-width { grid-column: 1 / -1; height: 220px; } /* 新圖表橫跨兩欄 */
         @media (max-width: 768px) { .charts-container { grid-template-columns: 1fr; } canvas { width: 100%; height: auto; } }
 
         #dashboard { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 25px; margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto;}
@@ -55,7 +57,7 @@
 </head>
 <body>
 
-    <h2>跑者矢狀面動態分析 - 單格動作檢視</h2>
+    <h2>跑者矢狀面動態分析 - 疲勞與效率檢測</h2>
     
     <div class="controls">
         <div class="btn-group">
@@ -71,7 +73,6 @@
     <div class="visual-section">
         <div class="canvas-wrapper">
             <div class="canvas-label">原始影像 + 全身骨架</div>
-            <!-- 修復 Safari 問題的核心：加上 autoplay 與 muted -->
             <video id="input_video" width="640" height="480" autoplay playsinline muted></video>
             <canvas id="output_canvas" width="640" height="480"></canvas>
         </div>
@@ -91,10 +92,13 @@
     </div>
 
     <div class="charts-container">
+        <!-- 原有四張圖表 -->
         <div class="chart-box"><canvas id="trajChart"></canvas></div>
         <div class="chart-box"><canvas id="comChart"></canvas></div>
         <div class="chart-box"><canvas id="angleChart"></canvas></div>
         <div class="chart-box"><canvas id="strideChart"></canvas></div>
+        <!-- 新增：GCT vs 離地高度 (跨越雙欄) -->
+        <div class="chart-box chart-full-width"><canvas id="gctHeightChart"></canvas></div>
     </div>
 
     <div id="dashboard">
@@ -148,27 +152,51 @@
         let dynamicGroundY = 0; const groundTolerance = 0.015; 
         let isLeftGrounded = false; let isRightGrounded = false; let leftContactStartTime = 0; let rightContactStartTime = 0;
         
+        // GCT vs Height 追蹤變數
+        let lastLeftGCT = null; let lastRightGCT = null;
+        let leftMaxSwingHeight = 0; let rightMaxSwingHeight = 0;
+
         let pendingLeftCellId = null; let pendingRightCellId = null;
         let stepMinKneeAngle = 180; let stepMinHipAngle = 180;
         let nextFootIsLeft = null; 
 
-        // ================= 新增：平均數值追蹤陣列 =================
-        let gctHistory = []; 
-        let oscHistory = [];
+        let gctHistory = []; let oscHistory = [];
 
+        // ================= 圖表初始化 =================
         const maxDataPoints = 90; const trajMaxPoints = 55;
         const chartOptions = { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false } }, elements: { point: { radius: 0 } }, plugins: { legend: { labels: { font: { size: 10 } } } } };
 
         const comChart = new Chart(document.getElementById('comChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '重心垂直高度 (cm)', data: [], borderColor: '#FFC300', borderWidth: 2, tension: 0.3 }] }, options: chartOptions });
         const angleChart = new Chart(document.getElementById('angleChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '右膝關節角度 (°)', data: [], borderColor: '#FF5733', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 60, suggestedMax: 180 }, x: { display: false } } } });
         const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#33A1FF', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } } });
+        
         const trajChart = new Chart(document.getElementById('trajChart').getContext('2d'), { type: 'scatter', data: { datasets: [ { label: '左腳軌跡 (L)', data: [], borderColor: '#3498db', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }, { label: '右腳軌跡 (R)', data: [], borderColor: '#e74c3c', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 } ] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: { display: true, text: '相對於重心的水平位置 (cm)', font: { size: 10 } } }, y: { display: true, title: { display: true, text: '離地高度 (cm)', font: { size: 10 } }, suggestedMin: -5, suggestedMax: 40 } }, plugins: { legend: { labels: { font: { size: 10 } } } } } });
+
+        // 新增：GCT vs 離地高度散佈圖
+        const gctHeightChart = new Chart(document.getElementById('gctHeightChart').getContext('2d'), {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    { label: '左腳單步表現 (L)', data: [], backgroundColor: '#3498db', pointRadius: 5, pointHoverRadius: 7 },
+                    { label: '右腳單步表現 (R)', data: [], backgroundColor: '#e74c3c', pointRadius: 5, pointHoverRadius: 7 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                scales: {
+                    x: { display: true, title: { display: true, text: '觸地時間 GCT (ms)', font: { size: 11, weight: 'bold' } }, suggestedMin: 150, suggestedMax: 350 },
+                    y: { display: true, title: { display: true, text: '該步收腿最大離地高度 (cm)', font: { size: 11, weight: 'bold' } }, suggestedMin: 10, suggestedMax: 45 }
+                },
+                plugins: { legend: { labels: { font: { size: 11 } } } }
+            }
+        });
 
         function resetData() {
             prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0; strideHistory = [];
             currentStepMaxY = -Infinity; currentStepMinY = Infinity; dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
             pendingLeftCellId = null; pendingRightCellId = null; stepMinKneeAngle = 180; stepMinHipAngle = 180; nextFootIsLeft = null; 
             gctHistory = []; oscHistory = [];
+            lastLeftGCT = null; lastRightGCT = null; leftMaxSwingHeight = 0; rightMaxSwingHeight = 0;
 
             document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
             document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
@@ -176,6 +204,8 @@
             
             [comChart, angleChart, strideChart].forEach(c => { c.data.labels = []; c.data.datasets[0].data = []; c.update(); });
             trajChart.data.datasets[0].data = []; trajChart.data.datasets[1].data = []; trajChart.update();
+            gctHeightChart.data.datasets[0].data = []; gctHeightChart.data.datasets[1].data = []; gctHeightChart.update();
+
             skelCtx.clearRect(0, 0, skelCanvasElement.width, skelCanvasElement.height);
         }
 
@@ -237,7 +267,6 @@
                     skelCtx.font = "bold 18px Arial"; skelCtx.fillStyle = '#ff7675';
                     skelCtx.fillText(currentRightHipAngle + "°", rightHip.x * sw + 15, rightHip.y * sh);
                     skelCtx.fillText(currentRightKneeAngle + "°", rightKnee.x * sw + 15, rightKnee.y * sh);
-                    
                     if (currentRightKneeAngle < stepMinKneeAngle) stepMinKneeAngle = currentRightKneeAngle;
                     if (currentRightHipAngle < stepMinHipAngle) stepMinHipAngle = currentRightHipAngle;
                 }
@@ -259,24 +288,39 @@
 
                     const midHipX = (leftHip.x + rightHip.x) / 2; 
                     const runningDirection = nose.x > midHipX ? 1 : -1;
+                    
+                    const leftHeightCm = (dynamicGroundY - leftAnkle.y) * cmPerUnit;
+                    const rightHeightCm = (dynamicGroundY - rightAnkle.y) * cmPerUnit;
 
                     if (nose.visibility > 0.5) {
-                        trajPointL = { x: (leftAnkle.x - midHipX) * runningDirection * cmPerUnit, y: (dynamicGroundY - leftAnkle.y) * cmPerUnit };
-                        trajPointR = { x: (rightAnkle.x - midHipX) * runningDirection * cmPerUnit, y: (dynamicGroundY - rightAnkle.y) * cmPerUnit };
+                        trajPointL = { x: (leftAnkle.x - midHipX) * runningDirection * cmPerUnit, y: leftHeightCm };
+                        trajPointR = { x: (rightAnkle.x - midHipX) * runningDirection * cmPerUnit, y: rightHeightCm };
                     }
 
                     if (isDraggingTimeline) {
                         prevAnkleDist = 0; isIncreasing = false;
                     } else {
-                        // 左腳 GCT
+                        // === 記錄騰空期的最大離地高度 ===
+                        if (!isLeftGrounded) leftMaxSwingHeight = Math.max(leftMaxSwingHeight, leftHeightCm);
+                        if (!isRightGrounded) rightMaxSwingHeight = Math.max(rightMaxSwingHeight, rightHeightCm);
+
+                        // 左腳 GCT 與 散佈圖打點
                         const currentLeftGrounded = leftAnkle.y > (dynamicGroundY - groundTolerance);
-                        if (currentLeftGrounded && !isLeftGrounded) { leftContactStartTime = currentTime; } 
+                        if (currentLeftGrounded && !isLeftGrounded) { 
+                            leftContactStartTime = currentTime; 
+                            // 左腳落地瞬間：將先前的 (GCT, MaxSwingHeight) 畫到散佈圖上
+                            if (lastLeftGCT !== null) {
+                                gctHeightChart.data.datasets[0].data.push({ x: lastLeftGCT, y: leftMaxSwingHeight });
+                                gctHeightChart.update();
+                            }
+                        } 
                         else if (!currentLeftGrounded && isLeftGrounded) {
                             const gctMs = Math.round((currentTime - leftContactStartTime) * 1000);
                             if (gctMs > 80 && gctMs < 400) { 
+                                lastLeftGCT = gctMs;
+                                leftMaxSwingHeight = 0; // 重置高度，準備紀錄下一次騰空
                                 gctHistory.push(gctMs);
-                                const avgGct = Math.round(gctHistory.reduce((a,b)=>a+b,0)/gctHistory.length);
-                                document.getElementById('gct_display').innerText = avgGct; 
+                                document.getElementById('gct_display').innerText = Math.round(gctHistory.reduce((a,b)=>a+b,0)/gctHistory.length); 
                                 if (pendingLeftCellId) {
                                     const cell = document.getElementById(pendingLeftCellId);
                                     if (cell) { cell.innerText = gctMs; cell.classList.remove('calculating'); cell.classList.add('foot-l'); }
@@ -286,15 +330,23 @@
                         }
                         isLeftGrounded = currentLeftGrounded;
 
-                        // 右腳 GCT
+                        // 右腳 GCT 與 散佈圖打點
                         const currentRightGrounded = rightAnkle.y > (dynamicGroundY - groundTolerance);
-                        if (currentRightGrounded && !isRightGrounded) { rightContactStartTime = currentTime; } 
+                        if (currentRightGrounded && !isRightGrounded) { 
+                            rightContactStartTime = currentTime; 
+                            // 右腳落地瞬間：打點
+                            if (lastRightGCT !== null) {
+                                gctHeightChart.data.datasets[1].data.push({ x: lastRightGCT, y: rightMaxSwingHeight });
+                                gctHeightChart.update();
+                            }
+                        } 
                         else if (!currentRightGrounded && isRightGrounded) {
                             const gctMs = Math.round((currentTime - rightContactStartTime) * 1000);
                             if (gctMs > 80 && gctMs < 400) { 
+                                lastRightGCT = gctMs;
+                                rightMaxSwingHeight = 0; // 重置
                                 gctHistory.push(gctMs);
-                                const avgGct = Math.round(gctHistory.reduce((a,b)=>a+b,0)/gctHistory.length);
-                                document.getElementById('gct_display').innerText = avgGct; 
+                                document.getElementById('gct_display').innerText = Math.round(gctHistory.reduce((a,b)=>a+b,0)/gctHistory.length); 
                                 if (pendingRightCellId) {
                                     const cell = document.getElementById(pendingRightCellId);
                                     if (cell) { cell.innerText = gctMs; cell.classList.remove('calculating'); cell.classList.add('foot-r'); }
@@ -326,8 +378,7 @@
                                     if (currentStepMaxY !== -Infinity && currentStepMinY !== Infinity) { 
                                         const osc = currentStepMaxY - currentStepMinY;
                                         oscHistory.push(osc);
-                                        const avgOsc = (oscHistory.reduce((a,b)=>a+b,0)/oscHistory.length).toFixed(1);
-                                        document.getElementById('vertical_oscillation').innerText = avgOsc; 
+                                        document.getElementById('vertical_oscillation').innerText = (oscHistory.reduce((a,b)=>a+b,0)/oscHistory.length).toFixed(1); 
                                     }
                                     
                                     let isLeftFootStep = false;
@@ -367,6 +418,7 @@
                     }
                 }
 
+                // 滾動圖表更新
                 if (!isDraggingTimeline && currentRightKneeAngle !== null && currentStrideCm !== null && comYCm !== null && trajPointL !== null && trajPointR !== null) {
                     const timeLabel = currentTime.toFixed(2);
                     comChart.data.labels.push(timeLabel); comChart.data.datasets[0].data.push(comYCm);
