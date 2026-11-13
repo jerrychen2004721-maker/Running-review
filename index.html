@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 雙腳軌跡與對稱性數據</title>
+    <title>跑步姿態分析 - 獨立下肢骨架與即時角度</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; background-color: #f4f4f9; margin: 0; padding: 20px; }
-        .main-layout { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; align-items: flex-start; }
-        .video-container { position: relative; display: inline-block; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        /* 視覺區塊排版：並排顯示原圖與獨立骨架 */
+        .visual-section { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; width: 100%; max-width: 1350px; margin: 0 auto 20px auto; }
+        .canvas-wrapper { position: relative; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; }
+        .canvas-label { font-weight: bold; margin-bottom: 10px; color: #333; }
         video { display: none; } 
-        canvas { background-color: #000; border-radius: 8px; max-width: 100%; height: auto; }
+        canvas { background-color: #000; border-radius: 8px; max-width: 100%; height: auto; width: 640px; }
         
         .controls { background: white; padding: 15px; border-radius: 8px; display: inline-block; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; width: 100%; max-width: 800px; }
         .btn-group button { padding: 10px 20px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 5px; margin: 0 5px; }
@@ -23,9 +26,9 @@
         .calibration { margin-top: 15px; font-size: 1.1em; }
         .calibration input { font-size: 1em; width: 70px; text-align: center; margin-left: 10px; }
 
-        .charts-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; max-width: 700px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .charts-container { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; max-width: 800px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 0 auto; }
         .chart-box { height: 180px; position: relative; }
-        @media (max-width: 768px) { .charts-container { grid-template-columns: 1fr; } }
+        @media (max-width: 768px) { .charts-container { grid-template-columns: 1fr; } canvas { width: 100%; height: auto; } }
 
         #dashboard { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 25px; margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto;}
         .card { background: white; padding: 10px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex: 1; min-width: 110px;}
@@ -40,14 +43,14 @@
         th { background-color: #f8f9fa; color: #333; position: sticky; top: 0; box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1); }
         tr:hover { background-color: #f1f1f1; }
         
-        .foot-l { color: #3498db; font-weight: bold; } /* 左腳藍色 */
-        .foot-r { color: #e74c3c; font-weight: bold; } /* 右腳紅色 */
+        .foot-l { color: #3498db; font-weight: bold; } 
+        .foot-r { color: #e74c3c; font-weight: bold; } 
         .calculating { color: #95a5a6; font-style: italic; font-size: 0.85em; }
     </style>
 </head>
 <body>
 
-    <h2>跑者矢狀面動態分析 - 雙腳軌跡與對稱性數據</h2>
+    <h2>跑者矢狀面動態分析 - 獨立骨架與對稱性檢測</h2>
     
     <div class="controls">
         <div class="btn-group">
@@ -60,18 +63,26 @@
         </div>
     </div>
     
-    <div class="main-layout">
-        <div class="video-container">
+    <!-- 視覺區塊：影像與獨立骨架並排 -->
+    <div class="visual-section">
+        <div class="canvas-wrapper">
+            <div class="canvas-label">原始影像 + 全身骨架</div>
             <video id="input_video" width="640" height="480" playsinline></video>
             <canvas id="output_canvas" width="640" height="480"></canvas>
         </div>
-        <div class="charts-container">
-            <!-- 雙腳軌跡圖 -->
-            <div class="chart-box"><canvas id="trajChart"></canvas></div>
-            <div class="chart-box"><canvas id="comChart"></canvas></div>
-            <div class="chart-box"><canvas id="angleChart"></canvas></div>
-            <div class="chart-box"><canvas id="strideChart"></canvas></div>
+        
+        <div class="canvas-wrapper">
+            <div class="canvas-label">下肢獨立骨架 (即時角度)</div>
+            <canvas id="skeleton_canvas" width="640" height="480"></canvas>
         </div>
+    </div>
+
+    <!-- 圖表區塊 -->
+    <div class="charts-container">
+        <div class="chart-box"><canvas id="trajChart"></canvas></div>
+        <div class="chart-box"><canvas id="comChart"></canvas></div>
+        <div class="chart-box"><canvas id="angleChart"></canvas></div>
+        <div class="chart-box"><canvas id="strideChart"></canvas></div>
     </div>
 
     <div id="dashboard">
@@ -102,6 +113,11 @@
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
+        
+        // 新增：獨立骨架畫布
+        const skelCanvasElement = document.getElementById('skeleton_canvas');
+        const skelCtx = skelCanvasElement.getContext('2d');
+
         const startBtn = document.getElementById('startBtn');
         const uploadBtn = document.getElementById('uploadBtn');
         const videoUpload = document.getElementById('videoUpload');
@@ -120,46 +136,32 @@
         let nextFootIsLeft = null; 
 
         // ================= 圖表初始化 =================
-        const maxDataPoints = 90; const trajMaxPoints = 55; // 稍微拉長保留點數，讓圓形更完整
+        const maxDataPoints = 90; const trajMaxPoints = 55;
         const chartOptions = { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false } }, elements: { point: { radius: 0 } }, plugins: { legend: { labels: { font: { size: 10 } } } } };
 
         const comChart = new Chart(document.getElementById('comChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '重心垂直高度 (cm)', data: [], borderColor: '#FFC300', borderWidth: 2, tension: 0.3 }] }, options: chartOptions });
         const angleChart = new Chart(document.getElementById('angleChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '右膝關節角度 (°)', data: [], borderColor: '#FF5733', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 60, suggestedMax: 180 }, x: { display: false } } } });
         const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#33A1FF', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } } });
         
-        // 修改：加入左右兩條軌跡線
         const trajChart = new Chart(document.getElementById('trajChart').getContext('2d'), { 
             type: 'scatter', 
-            data: { 
-                datasets: [
-                    { label: '左腳軌跡 (L)', data: [], borderColor: '#3498db', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 },
-                    { label: '右腳軌跡 (R)', data: [], borderColor: '#e74c3c', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }
-                ] 
-            }, 
-            options: { 
-                responsive: true, maintainAspectRatio: false, animation: false,
-                scales: { 
-                    x: { display: true, title: { display: true, text: '相對於重心的水平位置 (cm)', font: { size: 10 } } },
-                    y: { display: true, title: { display: true, text: '離地高度 (cm)', font: { size: 10 } }, suggestedMin: -5, suggestedMax: 40 }
-                },
-                plugins: { legend: { labels: { font: { size: 10 } } } }
-            } 
+            data: { datasets: [ { label: '左腳軌跡 (L)', data: [], borderColor: '#3498db', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }, { label: '右腳軌跡 (R)', data: [], borderColor: '#e74c3c', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 } ] }, 
+            options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: { display: true, text: '相對於重心的水平位置 (cm)', font: { size: 10 } } }, y: { display: true, title: { display: true, text: '離地高度 (cm)', font: { size: 10 } }, suggestedMin: -5, suggestedMax: 40 } }, plugins: { legend: { labels: { font: { size: 10 } } } } } 
         });
 
         function resetData() {
             prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0; strideHistory = [];
             currentStepMaxY = -Infinity; currentStepMinY = Infinity; dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
-            pendingLeftCellId = null; pendingRightCellId = null; stepMinKneeAngle = 180; stepMinHipAngle = 180;
-            nextFootIsLeft = null; 
+            pendingLeftCellId = null; pendingRightCellId = null; stepMinKneeAngle = 180; stepMinHipAngle = 180; nextFootIsLeft = null; 
 
             document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
             document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
             stepTableBody.innerHTML = ""; 
             
             [comChart, angleChart, strideChart].forEach(c => { c.data.labels = []; c.data.datasets[0].data = []; c.update(); });
-            trajChart.data.datasets[0].data = []; 
-            trajChart.data.datasets[1].data = []; 
-            trajChart.update();
+            trajChart.data.datasets[0].data = []; trajChart.data.datasets[1].data = []; trajChart.update();
+            
+            skelCtx.clearRect(0, 0, skelCanvasElement.width, skelCanvasElement.height);
         }
 
         function calculateAngle(a, b, c) {
@@ -172,23 +174,89 @@
         pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
         pose.onResults((results) => {
+            // 繪製原始畫布
             canvasCtx.save(); canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
+            // 繪製獨立骨架畫布底色 (深色黑板風格)
+            skelCtx.save();
+            skelCtx.fillStyle = '#111';
+            skelCtx.fillRect(0, 0, skelCanvasElement.width, skelCanvasElement.height);
+
             if (results.poseLandmarks) {
+                // 原圖：繪製隱藏臉部的骨架
                 const drawingLandmarks = results.poseLandmarks.map((lm, index) => index <= 10 ? { ...lm, visibility: 0 } : lm);
                 drawConnectors(canvasCtx, drawingLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 drawLandmarks(canvasCtx, drawingLandmarks, {color: '#FF0000', lineWidth: 1});
 
-                const nose = results.poseLandmarks[0]; const rightShoulder = results.poseLandmarks[12];
-                const leftHip = results.poseLandmarks[23]; const rightHip = results.poseLandmarks[24];
-                const rightKnee = results.poseLandmarks[26]; const leftAnkle = results.poseLandmarks[27]; const rightAnkle = results.poseLandmarks[28];
+                const lm = results.poseLandmarks;
+                const nose = lm[0]; 
+                const leftShoulder = lm[11]; const rightShoulder = lm[12];
+                const leftHip = lm[23]; const rightHip = lm[24];
+                const leftKnee = lm[25]; const rightKnee = lm[26]; 
+                const leftAnkle = lm[27]; const rightAnkle = lm[28];
 
                 const currentTime = cameraActive ? performance.now() / 1000 : videoElement.currentTime;
                 
-                let currentKneeAngle = null; let currentHipAngle = null; 
+                let currentRightKneeAngle = null; let currentRightHipAngle = null; 
+                let currentLeftKneeAngle = null; let currentLeftHipAngle = null; 
                 let currentStrideCm = null; let comYCm = null; 
                 let trajPointL = null; let trajPointR = null;
+
+                // ================= 繪製獨立下肢骨架 =================
+                const sw = skelCanvasElement.width;
+                const sh = skelCanvasElement.height;
+
+                function drawBone(p1, p2, color) {
+                    if(lm[p1].visibility > 0.5 && lm[p2].visibility > 0.5) {
+                        skelCtx.beginPath();
+                        skelCtx.moveTo(lm[p1].x * sw, lm[p1].y * sh);
+                        skelCtx.lineTo(lm[p2].x * sw, lm[p2].y * sh);
+                        skelCtx.strokeStyle = color; skelCtx.lineWidth = 6; skelCtx.lineCap = 'round';
+                        skelCtx.stroke();
+                    }
+                }
+
+                function drawJointDot(p, color) {
+                    if(lm[p].visibility > 0.5) {
+                        skelCtx.beginPath();
+                        skelCtx.arc(lm[p].x * sw, lm[p].y * sh, 5, 0, 2 * Math.PI);
+                        skelCtx.fillStyle = color; skelCtx.fill();
+                    }
+                }
+
+                // 畫出軀幹橫線 (白色)
+                drawBone(11, 12, '#FFF'); drawBone(23, 24, '#FFF');
+                // 左腿 (藍色)
+                drawBone(11, 23, '#3498db'); drawBone(23, 25, '#3498db'); drawBone(25, 27, '#3498db');
+                // 右腿 (紅色)
+                drawBone(12, 24, '#e74c3c'); drawBone(24, 26, '#e74c3c'); drawBone(26, 28, '#e74c3c');
+                
+                // 畫出關節點
+                [11, 12, 23, 24, 25, 26, 27, 28].forEach(pt => drawJointDot(pt, '#FFF'));
+                
+                // 計算並標示四個主要關節即時角度
+                if (rightHip && rightKnee && rightAnkle && rightShoulder && rightShoulder.visibility > 0.5) {
+                    currentRightKneeAngle = parseFloat(calculateAngle(rightHip, rightKnee, rightAnkle));
+                    currentRightHipAngle = parseFloat(calculateAngle(rightShoulder, rightHip, rightKnee));
+                    // 右側角度文字 (紅色)
+                    skelCtx.font = "bold 18px Arial"; skelCtx.fillStyle = '#ff7675';
+                    skelCtx.fillText(currentRightHipAngle + "°", rightHip.x * sw + 15, rightHip.y * sh);
+                    skelCtx.fillText(currentRightKneeAngle + "°", rightKnee.x * sw + 15, rightKnee.y * sh);
+                    
+                    if (currentRightKneeAngle < stepMinKneeAngle) stepMinKneeAngle = currentRightKneeAngle;
+                    if (currentRightHipAngle < stepMinHipAngle) stepMinHipAngle = currentRightHipAngle;
+                }
+
+                if (leftHip && leftKnee && leftAnkle && leftShoulder && leftShoulder.visibility > 0.5) {
+                    currentLeftKneeAngle = parseFloat(calculateAngle(leftHip, leftKnee, leftAnkle));
+                    currentLeftHipAngle = parseFloat(calculateAngle(leftShoulder, leftHip, leftKnee));
+                    // 左側角度文字 (藍色)
+                    skelCtx.font = "bold 18px Arial"; skelCtx.fillStyle = '#74b9ff';
+                    skelCtx.fillText(currentLeftHipAngle + "°", leftHip.x * sw - 55, leftHip.y * sh);
+                    skelCtx.fillText(currentLeftKneeAngle + "°", leftKnee.x * sw - 55, leftKnee.y * sh);
+                }
+                // =======================================================
 
                 if (leftAnkle && rightAnkle && nose && leftHip && rightHip) {
                     const currentMaxY = Math.max(leftAnkle.y, rightAnkle.y);
@@ -197,20 +265,12 @@
                     const pixelHeight = Math.abs(((leftAnkle.y + rightAnkle.y) / 2) - nose.y);
                     const cmPerUnit = userHeightCm / pixelHeight;
 
-                    const midHipX = (leftHip.x + rightHip.x) / 2; // 統一使用骨盆中點作為原點
+                    const midHipX = (leftHip.x + rightHip.x) / 2; 
                     const runningDirection = nose.x > midHipX ? 1 : -1;
 
                     if (nose.visibility > 0.5) {
-                        // 左腳軌跡點 (藍色)
-                        trajPointL = { 
-                            x: (leftAnkle.x - midHipX) * runningDirection * cmPerUnit, 
-                            y: (dynamicGroundY - leftAnkle.y) * cmPerUnit 
-                        };
-                        // 右腳軌跡點 (紅色)
-                        trajPointR = { 
-                            x: (rightAnkle.x - midHipX) * runningDirection * cmPerUnit, 
-                            y: (dynamicGroundY - rightAnkle.y) * cmPerUnit 
-                        };
+                        trajPointL = { x: (leftAnkle.x - midHipX) * runningDirection * cmPerUnit, y: (dynamicGroundY - leftAnkle.y) * cmPerUnit };
+                        trajPointR = { x: (rightAnkle.x - midHipX) * runningDirection * cmPerUnit, y: (dynamicGroundY - rightAnkle.y) * cmPerUnit };
                     }
 
                     // --- GCT 計算 ---
@@ -244,23 +304,12 @@
                     }
                     isRightGrounded = currentRightGrounded;
 
-                    // --- 重心高度 ---
                     const comY = (leftHip.y + rightHip.y) / 2;
                     comYCm = (1 - comY) * cmPerUnit;
                     if (comYCm > currentStepMaxY) currentStepMaxY = comYCm;
                     if (comYCm < currentStepMinY) currentStepMinY = comYCm;
 
-                    // --- 關節角度 ---
-                    if (rightKnee && rightAnkle && rightHip.visibility > 0.5) {
-                        currentKneeAngle = parseFloat(calculateAngle(rightHip, rightKnee, rightAnkle));
-                        if (currentKneeAngle < stepMinKneeAngle) stepMinKneeAngle = currentKneeAngle;
-                    }
-                    if (rightShoulder && rightKnee && rightShoulder.visibility > 0.5) {
-                        currentHipAngle = parseFloat(calculateAngle(rightShoulder, rightHip, rightKnee));
-                        if (currentHipAngle < stepMinHipAngle) stepMinHipAngle = currentHipAngle;
-                    }
-                    
-                    // --- 跨步判定 (Peak Detection) ---
+                    // --- 跨步判定 ---
                     const currentDist = Math.sqrt(Math.pow(leftAnkle.x - rightAnkle.x, 2) + Math.pow(leftAnkle.y - rightAnkle.y, 2));
                     currentStrideCm = currentDist * cmPerUnit;
 
@@ -277,22 +326,17 @@
                                 if (currentStepMaxY !== -Infinity && currentStepMinY !== Infinity) { document.getElementById('vertical_oscillation').innerText = (currentStepMaxY - currentStepMinY).toFixed(1); }
                                 
                                 let isLeftFootStep = false;
-                                if (stepCount === 1) {
-                                    isLeftFootStep = ((leftAnkle.x - rightAnkle.x) * runningDirection) > 0;
-                                } else {
-                                    isLeftFootStep = nextFootIsLeft;
-                                }
+                                if (stepCount === 1) { isLeftFootStep = ((leftAnkle.x - rightAnkle.x) * runningDirection) > 0; } 
+                                else { isLeftFootStep = nextFootIsLeft; }
                                 nextFootIsLeft = !isLeftFootStep;
 
                                 let footLabel = ''; let footClass = '';
                                 const currentGctCellId = `gct_cell_${stepCount}`;
 
                                 if (isLeftFootStep) {
-                                    footLabel = '左腳 (L)'; footClass = 'foot-l';
-                                    pendingLeftCellId = currentGctCellId; 
+                                    footLabel = '左腳 (L)'; footClass = 'foot-l'; pendingLeftCellId = currentGctCellId; 
                                 } else {
-                                    footLabel = '右腳 (R)'; footClass = 'foot-r';
-                                    pendingRightCellId = currentGctCellId; 
+                                    footLabel = '右腳 (R)'; footClass = 'foot-r'; pendingRightCellId = currentGctCellId; 
                                 }
 
                                 const row = document.createElement('tr');
@@ -318,13 +362,12 @@
                 }
 
                 // 圖表更新
-                if (currentKneeAngle !== null && currentStrideCm !== null && comYCm !== null && trajPointL !== null && trajPointR !== null) {
+                if (currentRightKneeAngle !== null && currentStrideCm !== null && comYCm !== null && trajPointL !== null && trajPointR !== null) {
                     const timeLabel = currentTime.toFixed(2);
                     comChart.data.labels.push(timeLabel); comChart.data.datasets[0].data.push(comYCm);
-                    angleChart.data.labels.push(timeLabel); angleChart.data.datasets[0].data.push(currentKneeAngle);
+                    angleChart.data.labels.push(timeLabel); angleChart.data.datasets[0].data.push(currentRightKneeAngle);
                     strideChart.data.labels.push(timeLabel); strideChart.data.datasets[0].data.push(currentStrideCm);
                     
-                    // 將左、右腳座標推入對應的資料集
                     trajChart.data.datasets[0].data.push(trajPointL);
                     trajChart.data.datasets[1].data.push(trajPointR);
 
@@ -338,13 +381,14 @@
                 }
             }
             canvasCtx.restore();
+            skelCtx.restore();
         });
 
         const camera = new Camera(videoElement, { onFrame: async () => { if(cameraActive) await pose.send({image: videoElement}); }, width: 640, height: 480 });
         startBtn.addEventListener('click', () => {
             if (!videoElement.paused) videoElement.pause(); cancelAnimationFrame(animationFrameId);
             if (!cameraActive) { resetData(); camera.start(); startBtn.innerText = "關閉攝影機"; cameraActive = true; } 
-            else { camera.stop(); videoElement.srcObject = null; startBtn.innerText = "啟動攝影機"; cameraActive = false; canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height); }
+            else { camera.stop(); videoElement.srcObject = null; startBtn.innerText = "啟動攝影機"; cameraActive = false; canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height); skelCtx.clearRect(0, 0, skelCanvasElement.width, skelCanvasElement.height); }
         });
         uploadBtn.addEventListener('click', () => videoUpload.click());
         videoUpload.addEventListener('change', (event) => {
@@ -357,8 +401,11 @@
         }
         videoElement.addEventListener('play', processVideoFrame);
         videoElement.addEventListener('loadeddata', () => {
+            // 同步調整兩個畫布的比例
             const ratio = videoElement.videoWidth / videoElement.videoHeight;
-            canvasElement.width = 640; canvasElement.height = 640 / ratio; videoElement.play();
+            canvasElement.width = 640; canvasElement.height = 640 / ratio; 
+            skelCanvasElement.width = 640; skelCanvasElement.height = 640 / ratio; 
+            videoElement.play();
         });
     </script>
 </body>
