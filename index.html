@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 專業深色介面版 (時間軸全數據同步版)</title>
+    <title>跑步姿態分析 - 專業深色介面版 (含騰空時間與觸地比)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -43,8 +43,8 @@
         input[type="range"] { flex-grow: 1; min-width: 150px; cursor: pointer; accent-color: #f39c12; }
         .time-display { font-family: monospace; font-size: 1.1em; color: #aaa; min-width: 110px; text-align: right; }
 
-        /* 儀表板：6 張卡片自適應排列 */
-        #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
+        /* 儀表板：8 張卡片 (4x2 網格自適應排列) */
+        #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
         .card { background: #1e1e1e; padding: 15px 12px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: border-color 0.3s; }
         .card .title { font-size: 0.82em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
         .card .value { font-size: 1.65em; font-weight: bold; color: #fff; margin-top: 6px; }
@@ -53,8 +53,10 @@
         .card.gct-card { border-bottom: 4px solid #e74c3c; }
         .card.speed-card { border-bottom: 4px solid #2ecc71; }
         .card.sym-card { border-bottom: 4px solid #3498db; }
+        .card.flight-card { border-bottom: 4px solid #1abc9c; }
+        .card.duty-card { border-bottom: 4px solid #f39c12; }
 
-        /* 對稱性狀態燈號顏色 */
+        /* 狀態燈號顏色 */
         .sym-good { color: #2ecc71 !important; }
         .sym-warn { color: #f1c40f !important; }
         .sym-risk { color: #e74c3c !important; }
@@ -85,6 +87,7 @@
         .foot-l { color: #5dade2; font-weight: bold; } 
         .foot-r { color: #ec7063; font-weight: bold; } 
         .speed-val { color: #2ecc71; font-weight: bold; }
+        .flight-val { color: #1abc9c; font-weight: bold; }
         .calculating { color: #7f8c8d; font-style: italic; font-size: 0.85em; }
 
         @media (max-width: 900px) {
@@ -139,6 +142,18 @@
     <div id="dashboard">
         <div class="card speed-card"><div class="title">平均跑步時速</div><div class="value"><span id="avg_speed">0.0</span><span class="unit">km/h</span></div></div>
         <div class="card gct-card"><div class="title">平均觸地時間</div><div class="value"><span id="gct_display">0</span><span class="unit">ms</span></div></div>
+        <!-- 新增：平均騰空時間 (Flight Time) -->
+        <div class="card flight-card">
+            <div class="title">平均騰空時間</div>
+            <div class="value"><span id="flight_display">0</span><span class="unit">ms</span></div>
+            <div class="sub-info" id="flight_detail">雙腳完全離地無支撐期</div>
+        </div>
+        <!-- 新增：觸地比 (Duty Factor) -->
+        <div class="card duty-card" id="dutyCard">
+            <div class="title">平均觸地比 (DF)</div>
+            <div class="value"><span id="duty_display">-</span><span class="unit">%</span></div>
+            <div class="sub-info" id="duty_detail">等待完整步態週期...</div>
+        </div>
         <div class="card sym-card" id="symmetryCard">
             <div class="title">左右腳觸地對稱性</div>
             <div class="value"><span id="symmetry_display">-</span><span class="unit">%</span></div>
@@ -188,6 +203,7 @@
                         <th>觸地腳</th>
                         <th>單步時速 (km/h)</th>
                         <th>單步觸地時間 (ms)</th>
+                        <th>騰空時間 (ms)</th>
                         <th>跨步步幅 (cm)</th>
                         <th>右膝最大屈曲 (°)</th>
                         <th>右髖最大屈曲 (°)</th>
@@ -239,6 +255,11 @@
     let dynamicGroundY = 0; const groundTolerance = 0.015; 
     let isLeftGrounded = false; let isRightGrounded = false; let leftContactStartTime = 0; let rightContactStartTime = 0;
     
+    // 騰空期追蹤狀態
+    let isFlightPhase = false;
+    let flightStartTime = 0;
+    let lastToeOffStepNum = null;
+
     let lastLeftStepInfo = null; 
     let lastRightStepInfo = null;
     let leftMaxSwingHeight = 0; let rightMaxSwingHeight = 0;
@@ -249,11 +270,12 @@
     let stepMinKneeAngle = 180; let stepMinHipAngle = 180;
     let nextFootIsLeft = null; 
 
-    // ================= 時間軸歷史資料庫 (支援進度條雙向同步的核心) =================
-    let maxAnalyzedTime = -1;     // 記錄影片已分析過的最遠時間點，避免倒轉重播時重複計算
-    let stepRecords = [];         // 儲存每一步完整資料: { step, time, isLeft, speed, gct, gctEndTime, stride, knee, hip, osc }
-    let frameLogs = [];           // 儲存每一幀連續曲線點: { time, comY, stride, trajL, trajR }
-    let scatterLogs = [];         // 儲存散佈圖所有已完成點: { x, y, step, time, recordTime, isLeft }
+    // ================= 時間軸歷史資料庫 =================
+    let maxAnalyzedTime = -1;     
+    // stepRecords: { step, time, isLeft, speed, gct, gctEndTime, flightTime, flightEndTime, stride, knee, hip, osc }
+    let stepRecords = [];         
+    let frameLogs = [];           
+    let scatterLogs = [];         
     let lastRenderedStepCount = -1;
 
     // ================= 自訂外掛：在圓點正上方直接繪製第幾步 =================
@@ -368,23 +390,59 @@
 
     // ================= 核心：依據指定時間點同步所有儀表板、圖表與表格 =================
     function syncAllVisualsToTime(targetTime, forceRebuildTable = false) {
-        // 1. 篩選截至 targetTime 為止的所有步數紀錄
         const validSteps = stepRecords.filter(r => r.time <= targetTime + 0.001);
 
-        // 2. 更新儀表板 6 張卡片
-        // 2a. 平均時速
+        // 1. 平均時速
         const validSpeeds = validSteps.filter(r => r.speed !== null).map(r => r.speed);
         document.getElementById('avg_speed').innerText = validSpeeds.length > 0 
             ? (validSpeeds.reduce((a, b) => a + b, 0) / validSpeeds.length).toFixed(1) 
             : "0.0";
 
-        // 2b. 平均觸地時間 (僅計算在 targetTime 前已完成離地結算的步數)
+        // 2. 平均觸地時間 (GCT)
         const completedGctSteps = validSteps.filter(r => r.gct !== null && r.gctEndTime <= targetTime + 0.001);
-        document.getElementById('gct_display').innerText = completedGctSteps.length > 0 
-            ? Math.round(completedGctSteps.reduce((a, b) => a + b.gct, 0) / completedGctSteps.length) 
-            : "0";
+        const avgGctMs = completedGctSteps.length > 0 
+            ? (completedGctSteps.reduce((a, b) => a + b.gct, 0) / completedGctSteps.length) 
+            : 0;
+        document.getElementById('gct_display').innerText = avgGctMs > 0 ? Math.round(avgGctMs) : "0";
 
-        // 2c. 左右腳觸地對稱性 (%)
+        // 3. 平均騰空時間 (Flight Time) 與觸地比 (Duty Factor)
+        const completedFlightSteps = validSteps.filter(r => r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
+        const avgFlightMs = completedFlightSteps.length > 0 
+            ? (completedFlightSteps.reduce((a, b) => a + b.flightTime, 0) / completedFlightSteps.length) 
+            : 0;
+        document.getElementById('flight_display').innerText = avgFlightMs > 0 ? Math.round(avgFlightMs) : "0";
+
+        const dutyDisplay = document.getElementById('duty_display');
+        const dutyDetail = document.getElementById('duty_detail');
+        const dutyCard = document.getElementById('dutyCard');
+
+        if (avgGctMs > 0 && avgFlightMs > 0) {
+            // 單腳觸地比 DF (%) = GCT / [2 * (GCT + FT)] * 100%
+            const dutyFactorPct = (avgGctMs / (2 * (avgGctMs + avgFlightMs))) * 100;
+            dutyDisplay.innerText = dutyFactorPct.toFixed(1);
+            dutyDisplay.className = "";
+
+            if (dutyFactorPct < 35.0) {
+                dutyDisplay.classList.add('sym-good');
+                dutyCard.style.borderBottomColor = '#2ecc71';
+                dutyDetail.innerText = "🟢 高彈性回彈 (競速級效率)";
+            } else if (dutyFactorPct <= 45.0) {
+                dutyDisplay.classList.add('sym-warn');
+                dutyCard.style.borderBottomColor = '#f39c12';
+                dutyDetail.innerText = "🟡 穩健跑姿 (標準有氧節奏)";
+            } else {
+                dutyDisplay.classList.add('sym-risk');
+                dutyCard.style.borderBottomColor = '#e74c3c';
+                dutyDetail.innerText = "🔴 觸地佔比偏高 (建議加強剛性)";
+            }
+        } else {
+            dutyDisplay.innerText = "-";
+            dutyDisplay.className = "";
+            dutyCard.style.borderBottomColor = '#f39c12';
+            dutyDetail.innerText = "等待完整步態週期...";
+        }
+
+        // 4. 左右腳觸地對稱性 (%)
         const leftGcts = completedGctSteps.filter(r => r.isLeft).map(r => r.gct);
         const rightGcts = completedGctSteps.filter(r => !r.isLeft).map(r => r.gct);
         const symDisplay = document.getElementById('symmetry_display');
@@ -422,13 +480,13 @@
             symDetail.innerText = `${statusTag} (L:${Math.round(avgL)} / R:${Math.round(avgR)}ms)`;
         }
 
-        // 2d. 平均垂直振幅
+        // 5. 平均垂直振幅
         const validOscs = validSteps.filter(r => r.osc !== null).map(r => r.osc);
         document.getElementById('vertical_oscillation').innerText = validOscs.length > 0 
             ? (validOscs.reduce((a, b) => a + b, 0) / validOscs.length).toFixed(1) 
             : "0.0";
 
-        // 2e. 平均步頻
+        // 6. 平均步頻
         if (validSteps.length > 1) {
             const span = validSteps[validSteps.length - 1].time - validSteps[0].time;
             document.getElementById('cadence').innerText = span > 0 ? Math.round((validSteps.length / span) * 60) : "0";
@@ -436,20 +494,23 @@
             document.getElementById('cadence').innerText = "0";
         }
 
-        // 2f. 平均跨距
+        // 7. 平均跨距
         document.getElementById('avg_stride').innerText = validSteps.length > 0 
             ? (validSteps.reduce((a, b) => a + b.stride, 0) / validSteps.length).toFixed(1) 
             : "0.0";
 
-        // 3. 同步下方詳細數據表格
+        // 8. 同步下方詳細數據表格
         if (forceRebuildTable || validSteps.length !== lastRenderedStepCount) {
             stepTableBody.innerHTML = "";
-            // 倒序渲染，讓該時間點的「最新一步」顯示在表格最上方
             for (let i = validSteps.length - 1; i >= 0; i--) {
                 const r = validSteps[i];
                 const isGctReady = (r.gct !== null && r.gctEndTime <= targetTime + 0.001);
                 const gctText = isGctReady ? r.gct : "運算中...";
                 const gctClass = isGctReady ? (r.isLeft ? "foot-l" : "foot-r") : "calculating";
+
+                const isFlightReady = (r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
+                const flightText = isFlightReady ? r.flightTime : "-";
+                const flightClass = isFlightReady ? "flight-val" : "calculating";
 
                 const row = document.createElement('tr');
                 row.id = `step_row_${r.step}`;
@@ -458,6 +519,7 @@
                     <td class="${r.isLeft ? 'foot-l' : 'foot-r'}">${r.isLeft ? '左腳 (L)' : '右腳 (R)'}</td>
                     <td class="speed-val">${r.speed !== null ? r.speed.toFixed(1) : '-'}</td>
                     <td id="gct_cell_${r.step}" class="${gctClass}">${gctText}</td>
+                    <td class="${flightClass}">${flightText}</td>
                     <td>${r.stride.toFixed(1)}</td>
                     <td>${r.knee !== null ? r.knee.toFixed(1) : '-'}</td>
                     <td>${r.hip !== null ? r.hip.toFixed(1) : '-'}</td>
@@ -467,22 +529,19 @@
             lastRenderedStepCount = validSteps.length;
         }
 
-        // 4. 同步 4 張動態圖表
+        // 9. 同步 4 張動態圖表
         const validFrames = frameLogs.filter(f => f.time <= targetTime + 0.001);
         
-        // 4a. 重心垂直高度 & 雙腳踝距離圖 (取該時間點前最近 90 幀)
         const recentFrames = validFrames.slice(-maxDataPoints);
         comChart.data.labels = recentFrames.map(f => f.time.toFixed(2));
         comChart.data.datasets[0].data = recentFrames.map(f => f.comY);
         strideChart.data.labels = recentFrames.map(f => f.time.toFixed(2));
         strideChart.data.datasets[0].data = recentFrames.map(f => f.stride);
 
-        // 4b. 腳踝軌跡圖 (取該時間點前最近 55 幀)
         const recentTraj = validFrames.slice(-trajMaxPoints);
         trajChart.data.datasets[0].data = recentTraj.map(f => f.trajL);
         trajChart.data.datasets[1].data = recentTraj.map(f => f.trajR);
 
-        // 4c. 觸地時間與離地高度散佈圖 (篩選該時間點前已產生的點)
         const validScatter = scatterLogs.filter(s => s.recordTime <= targetTime + 0.001);
         gctHeightChart.data.datasets[0].data = validScatter.filter(s => s.isLeft);
         gctHeightChart.data.datasets[1].data = validScatter.filter(s => !s.isLeft);
@@ -527,22 +586,25 @@
         }
     });
 
-    // ================= 匯出 CSV 與 LINE 分享邏輯 (依據當前畫面顯示的表格匯出) =================
+    // ================= 匯出 CSV 與 LINE 分享邏輯 =================
     function generateCsvContent() {
         const rows = Array.from(stepTableBody.querySelectorAll('tr'));
         if (rows.length === 0) return null;
 
         const symVal = document.getElementById('symmetry_display').innerText;
         const symDetail = document.getElementById('symmetry_detail').innerText;
+        const flightVal = document.getElementById('flight_display').innerText;
+        const dutyVal = document.getElementById('duty_display').innerText;
+        const dutyDetail = document.getElementById('duty_detail').innerText;
         const timeNote = !cameraActive ? ` (截至影片 ${currentTimeDisplay.innerText} 秒)` : "";
 
         let csvLines = [];
         csvLines.push(`跑者矢狀面動態分析報表${timeNote}`);
         csvLines.push(`匯出時間,${new Date().toLocaleString('zh-TW')}`);
         csvLines.push(`設定身高(cm),${document.getElementById('userHeight').value}`);
-        csvLines.push(`平均時速(km/h),${document.getElementById('avg_speed').innerText},平均觸地時間(ms),${document.getElementById('gct_display').innerText},左右腳觸地對稱性(%),${symVal} (${symDetail}),平均垂直振幅(cm),${document.getElementById('vertical_oscillation').innerText},平均步頻(SPM),${document.getElementById('cadence').innerText},平均跨距(cm),${document.getElementById('avg_stride').innerText}`);
+        csvLines.push(`平均時速(km/h),${document.getElementById('avg_speed').innerText},平均觸地時間(ms),${document.getElementById('gct_display').innerText},平均騰空時間(ms),${flightVal},平均觸地比(%),${dutyVal} (${dutyDetail}),左右腳觸地對稱性(%),${symVal} (${symDetail}),平均垂直振幅(cm),${document.getElementById('vertical_oscillation').innerText},平均步頻(SPM),${document.getElementById('cadence').innerText},平均跨距(cm),${document.getElementById('avg_stride').innerText}`);
         csvLines.push(""); 
-        csvLines.push("步數,觸地腳,單步時速(km/h),單步觸地時間(ms),跨步步幅(cm),右膝最大屈曲(°),右髖最大屈曲(°)");
+        csvLines.push("步數,觸地腳,單步時速(km/h),單步觸地時間(ms),騰空時間(ms),跨步步幅(cm),右膝最大屈曲(°),右髖最大屈曲(°)");
 
         const chronologicalRows = rows.reverse();
         chronologicalRows.forEach(tr => {
@@ -595,6 +657,8 @@
         const visibleSteps = stepTableBody.querySelectorAll('tr').length;
         const avgSpeed = document.getElementById('avg_speed').innerText;
         const avgGct = document.getElementById('gct_display').innerText;
+        const avgFlight = document.getElementById('flight_display').innerText;
+        const dutyVal = document.getElementById('duty_display').innerText;
         const symVal = document.getElementById('symmetry_display').innerText;
         const symDetail = document.getElementById('symmetry_detail').innerText;
         const avgOsc = document.getElementById('vertical_oscillation').innerText;
@@ -607,6 +671,8 @@
 📊 分析步數：${visibleSteps} 步
 ⚡ 平均時速：${avgSpeed} km/h
 ⏱️ 平均觸地時間：${avgGct} ms
+🚀 平均騰空時間：${avgFlight} ms
+🔋 平均觸地比 (DF)：${dutyVal}%
 ⚖️ 左右腳對稱性：${symVal}% (${symDetail})
 📈 平均垂直振幅：${avgOsc} cm
 👟 平均步頻：${avgCadence} SPM
@@ -637,6 +703,7 @@
     function resetData() {
         prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0;
         currentStepMaxY = -Infinity; currentStepMinY = Infinity; dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
+        isFlightPhase = false; flightStartTime = 0; lastToeOffStepNum = null;
         pendingLeftStepNum = null; pendingRightStepNum = null;
         pendingLeftStepTime = null; pendingRightStepTime = null;
         stepMinKneeAngle = 180; stepMinHipAngle = 180; nextFootIsLeft = null; 
@@ -702,7 +769,6 @@
             drawBone(12, 24, '#e74c3c'); drawBone(24, 26, '#e74c3c'); drawBone(26, 28, '#e74c3c');
             [11, 12, 23, 24, 25, 26, 27, 28].forEach(pt => drawJointDot(pt, '#fff'));
             
-            // 判斷是否為「尚未分析過的新時間點」（防止倒轉重播時重複寫入同一段數據）
             const isNewTimelineProgress = cameraActive || (!isDraggingTimeline && currentTime > maxAnalyzedTime + 0.005);
 
             if (rightHip && rightKnee && rightAnkle && rightShoulder && rightShoulder.visibility > 0.5) {
@@ -744,7 +810,6 @@
                 }
 
                 if (!isNewTimelineProgress) {
-                    // 若正在拖曳進度條，或正在重播已分析過的區段，直接同步歷史快照
                     if (!cameraActive) {
                         syncAllVisualsToTime(currentTime, false);
                     }
@@ -755,8 +820,10 @@
                     if (!isLeftGrounded) leftMaxSwingHeight = Math.max(leftMaxSwingHeight, leftHeightCm);
                     if (!isRightGrounded) rightMaxSwingHeight = Math.max(rightMaxSwingHeight, rightHeightCm);
 
-                    // 左腳觸地與離地判定
                     const currentLeftGrounded = leftAnkle.y > (dynamicGroundY - groundTolerance);
+                    const currentRightGrounded = rightAnkle.y > (dynamicGroundY - groundTolerance);
+
+                    // 1. 左腳觸地與離地判定
                     if (currentLeftGrounded && !isLeftGrounded) { 
                         leftContactStartTime = currentTime; 
                         if (lastLeftStepInfo !== null) { 
@@ -781,21 +848,19 @@
                             }; 
                             leftMaxSwingHeight = 0; 
 
-                            // 更新歷史紀錄中的該步 GCT
                             const rec = stepRecords.find(r => r.step === targetStep);
                             if (rec) {
                                 rec.gct = gctMs;
                                 rec.gctEndTime = currentTime;
                                 needsTableRebuild = true;
                             }
+                            lastToeOffStepNum = targetStep;
                             pendingLeftStepNum = null;
                             pendingLeftStepTime = null;
                         }
                     }
-                    isLeftGrounded = currentLeftGrounded;
 
-                    // 右腳觸地與離地判定
-                    const currentRightGrounded = rightAnkle.y > (dynamicGroundY - groundTolerance);
+                    // 2. 右腳觸地與離地判定
                     if (currentRightGrounded && !isRightGrounded) { 
                         rightContactStartTime = currentTime; 
                         if (lastRightStepInfo !== null) { 
@@ -826,10 +891,34 @@
                                 rec.gctEndTime = currentTime;
                                 needsTableRebuild = true;
                             }
+                            lastToeOffStepNum = targetStep;
                             pendingRightStepNum = null;
                             pendingRightStepTime = null;
                         }
                     }
+
+                    // 3. 騰空期（雙腳同時離地）起訖時間計算
+                    const bothFeetAirborne = !currentLeftGrounded && !currentRightGrounded;
+                    if (bothFeetAirborne && !isFlightPhase) {
+                        // 進入騰空期 (最後一隻支撐腳剛離地)
+                        isFlightPhase = true;
+                        flightStartTime = currentTime;
+                    } else if (!bothFeetAirborne && isFlightPhase) {
+                        // 結束騰空期 (對側腳剛觸地)
+                        isFlightPhase = false;
+                        const flightMs = Math.round((currentTime - flightStartTime) * 1000);
+                        // 過濾有效跑步騰空時間區間 (30ms ~ 350ms)
+                        if (flightMs >= 30 && flightMs <= 350 && lastToeOffStepNum !== null) {
+                            const rec = stepRecords.find(r => r.step === lastToeOffStepNum);
+                            if (rec && rec.flightTime === null) {
+                                rec.flightTime = flightMs;
+                                rec.flightEndTime = currentTime;
+                                needsTableRebuild = true;
+                            }
+                        }
+                    }
+
+                    isLeftGrounded = currentLeftGrounded;
                     isRightGrounded = currentRightGrounded;
 
                     const comY = (leftHip.y + rightHip.y) / 2;
@@ -877,7 +966,6 @@
                                     pendingRightStepTime = currentTime;
                                 }
 
-                                // 寫入完整單步歷史日誌
                                 stepRecords.push({
                                     step: stepCount,
                                     time: currentTime,
@@ -885,6 +973,8 @@
                                     speed: validSpeed,
                                     gct: null,
                                     gctEndTime: Infinity,
+                                    flightTime: null,
+                                    flightEndTime: Infinity,
                                     stride: strideCm,
                                     knee: stepMinKneeAngle === 180 ? null : stepMinKneeAngle,
                                     hip: stepMinHipAngle === 180 ? null : stepMinHipAngle,
@@ -910,7 +1000,6 @@
                         });
                     }
 
-                    // 同步更新所有畫面數據
                     syncAllVisualsToTime(currentTime, needsTableRebuild);
                 }
             }
@@ -1022,7 +1111,6 @@
         }
     });
 
-    // 拖曳進度條時，即時同步時間顯示與所有下方表格、圖表與儀表板
     videoSlider.addEventListener('input', () => {
         isDraggingTimeline = true;
         videoElement.pause();
