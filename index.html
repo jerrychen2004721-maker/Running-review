@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跑步姿態分析 - 行動版與專業深色介面</title>
+    <title>跑步姿態分析 - 雙欄緊湊數據表版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #121212; color: #e0e0e0; margin: 0; padding: 12px 8px; }
-        .container-main { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+        .container-main { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
         h2 { margin: 0; color: #ffffff; letter-spacing: 1px; font-size: 1.35em; }
 
         .panel { background: #1e1e1e; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; padding: 14px; }
@@ -27,7 +27,7 @@
         .calibration { font-size: 0.9em; color: #bbb; display: flex; align-items: center; gap: 8px; justify-content: center; }
         .calibration input { font-size: 0.95em; width: 62px; text-align: center; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 4px; }
 
-        /* 雙影像畫布區：固定容器高度防止直式影片把手機撐爆 */
+        /* 雙影像畫布區 */
         .visual-section { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
         .canvas-wrapper { background: #1e1e1e; padding: 10px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .canvas-label { font-weight: bold; margin-bottom: 8px; color: #ccc; font-size: 0.95em; letter-spacing: 0.5px; }
@@ -59,14 +59,13 @@
         .card.flight-card { border-bottom: 3px solid #1abc9c; }
         .card.duty-card { border-bottom: 3px solid #f39c12; }
 
-        /* 手機版收合次要卡片按鈕 (桌機版隱藏) */
         #toggleCardsBtn { display: none; background: #2c2c2c; color: #ccc; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; font-size: 0.85em; cursor: pointer; width: 100%; font-weight: bold; }
 
         .sym-good { color: #2ecc71 !important; }
         .sym-warn { color: #f1c40f !important; }
         .sym-risk { color: #e74c3c !important; }
 
-        /* 手機版分頁籤導覽列 (桌機版隱藏，手機版顯示) */
+        /* 手機版分頁籤導覽列 */
         .mobile-tabs { display: none; gap: 8px; background: #1e1e1e; padding: 6px; border-radius: 10px; border: 1px solid #333; }
         .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; background: transparent; color: #999; font-weight: bold; font-size: 0.95em; cursor: pointer; transition: all 0.2s; }
         .tab-btn.active { background: #2980b9; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
@@ -79,7 +78,7 @@
         .toggle-label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #f1c40f; font-weight: bold; user-select: none; }
         .toggle-label input { cursor: pointer; accent-color: #f1c40f; }
 
-        /* 數據表格區 */
+        /* 雙欄並排數據表格區 (一列顯示兩步) */
         .table-header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #333; }
         .table-title { font-size: 1.05em; font-weight: bold; color: #fff; letter-spacing: 0.5px; }
         .export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -87,20 +86,26 @@
         #shareLineBtn { background-color: #06C755; } #shareLineBtn:hover { background-color: #05b34c; }
 
         .table-scroll-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; scroll-behavior: smooth; }
-        table { width: 100%; border-collapse: collapse; text-align: center; min-width: 580px; }
-        th, td { padding: 10px 8px; border-bottom: 1px solid #333; font-size: 0.9em; color: #ddd; }
-        th { background-color: #2a2a2a; color: #fff; position: sticky; top: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 1; }
-        tr { transition: background-color 0.3s; }
-        tr:hover { background-color: #2c3e50; }
+        table.paired-table { width: 100%; border-collapse: collapse; text-align: center; min-width: 920px; }
+        table.paired-table th, table.paired-table td { padding: 9px 5px; border-bottom: 1px solid #333; font-size: 0.84em; color: #ddd; white-space: nowrap; }
+        table.paired-table th { background-color: #2a2a2a; color: #fff; position: sticky; top: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 1; }
         
-        tr.highlight-row { background-color: #f39c12 !important; color: #121212 !important; font-weight: bold; }
-        tr.highlight-row td { color: #121212 !important; }
+        /* 左右兩步中間的明顯分隔線與底色區隔 */
+        .pair-divider { border-right: 2px solid #555 !important; }
+        .right-half-bg { background-color: rgba(255, 255, 255, 0.025); }
+        
+        table.paired-table tr { transition: background-color 0.2s; }
+        table.paired-table tbody tr:hover { background-color: #263545; }
+        
+        /* 單步半邊高亮 (點擊散佈圖圓點時觸發) */
+        td.highlight-half { background-color: #f39c12 !important; color: #121212 !important; font-weight: bold; }
         
         .foot-l { color: #5dade2; font-weight: bold; } 
         .foot-r { color: #ec7063; font-weight: bold; } 
         .speed-val { color: #2ecc71; font-weight: bold; }
         .flight-val { color: #1abc9c; font-weight: bold; }
-        .calculating { color: #7f8c8d; font-style: italic; font-size: 0.85em; }
+        .calculating { color: #7f8c8d; font-style: italic; font-size: 0.8em; }
+        .empty-slot { color: #444; }
 
         /* ================= 手機版專屬緊湊響應式設計 (<= 768px) ================= */
         @media (max-width: 768px) {
@@ -109,25 +114,21 @@
             h2 { font-size: 1.15em; }
             .panel { padding: 10px; border-radius: 8px; }
 
-            /* 控制列緊湊化 */
             .controls { flex-direction: column; align-items: stretch; gap: 8px; }
             .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
             .btn-group button { padding: 8px 10px; font-size: 0.85em; }
             #switchCamBtn[style*="inline-block"] { grid-column: span 2; }
 
-            /* 雙畫布在手機上維持「左右並排」且限制高度，避免垂直佔滿螢幕 */
             .visual-section { grid-template-columns: 1fr 1fr; gap: 6px; }
             .canvas-wrapper { padding: 6px; border-radius: 8px; }
             .canvas-label { font-size: 0.78em; margin-bottom: 4px; }
             canvas { max-height: 210px; }
 
-            /* 時間軸按鈕緊湊化 */
             .timeline-container { padding: 8px 10px; gap: 6px; }
             .timeline-btns { width: 100%; justify-content: space-between; }
             .step-frame-btn, #playPauseBtn { flex: 1; padding: 7px 6px; font-size: 0.8em; }
             .time-display { font-size: 0.85em; min-width: 80px; }
 
-            /* 儀表板改為 2x2 緊湊網格，預設隱藏後 4 張次要卡片 */
             #dashboard { grid-template-columns: 1fr 1fr; gap: 6px; }
             .card { padding: 8px 6px; border-radius: 8px; }
             .card .title { font-size: 0.72em; }
@@ -137,14 +138,13 @@
             #dashboard.collapsed .secondary-card { display: none; }
             #toggleCardsBtn { display: block; }
 
-            /* 啟用手機版分頁籤，圖表與表格一次只顯示一個，免長距離滑動 */
             .mobile-tabs { display: flex; }
             .charts-container { grid-template-columns: 1fr; gap: 12px; }
             .chart-box { height: 200px; }
             
             .tab-panel.mobile-hidden { display: none !important; }
             .table-header-bar { flex-direction: row; justify-content: space-between; }
-            .table-title { font-size: 0.95em; }
+            .table-title { font-size: 0.92em; }
             .export-actions button { padding: 6px 10px; font-size: 0.8em; }
             .table-scroll-wrap { max-height: 280px; }
         }
@@ -167,7 +167,6 @@
         </div>
     </div>
     
-    <!-- 雙影像區：手機上左右並排且限制最大高度 -->
     <div class="visual-section">
         <div class="canvas-wrapper">
             <div class="canvas-label">原始影像 + 骨架</div>
@@ -181,7 +180,6 @@
         </div>
     </div>
 
-    <!-- 時間軸與逐格微調控制列 -->
     <div class="panel timeline-container" id="timelineSection">
         <div class="timeline-btns">
             <button id="prevFrameBtn" class="step-frame-btn" title="快捷鍵：←">⏮ -0.03s</button>
@@ -194,7 +192,6 @@
         </div>
     </div>
 
-    <!-- 儀表板：手機上預設顯示前 4 項核心指標，點擊可展開全部 8 項 -->
     <div class="dashboard-wrap">
         <div id="dashboard" class="collapsed">
             <div class="card speed-card"><div class="title">平均時速</div><div class="value"><span id="avg_speed">0.0</span><span class="unit">km/h</span></div></div>
@@ -206,7 +203,6 @@
             </div>
             <div class="card"><div class="title">平均步頻</div><div class="value"><span id="cadence">0</span><span class="unit">SPM</span></div></div>
             
-            <!-- 次要卡片 (手機版預設收合) -->
             <div class="card flight-card secondary-card">
                 <div class="title">平均騰空時間</div>
                 <div class="value"><span id="flight_display">0</span><span class="unit">ms</span></div>
@@ -223,13 +219,11 @@
         <button id="toggleCardsBtn">🔽 展開更多指標 (騰空時間 / 觸地比 / 振幅 / 跨距)</button>
     </div>
 
-    <!-- 手機版分頁籤導覽列 -->
     <div class="mobile-tabs">
         <button class="tab-btn active" data-target="chartsPanel">📊 動態圖表分析</button>
-        <button class="tab-btn" data-target="tableContainer">📋 每步詳細數據表</button>
+        <button class="tab-btn" data-target="tableContainer">📋 每步詳細數據 (雙欄)</button>
     </div>
 
-    <!-- 圖表分頁 -->
     <div class="panel charts-container tab-panel" id="chartsPanel">
         <div class="chart-box">
             <div class="chart-canvas-wrap"><canvas id="trajChart"></canvas></div>
@@ -252,10 +246,10 @@
         </div>
     </div>
 
-    <!-- 表格分頁 (手機版預設隱藏，透過分頁籤切換) -->
+    <!-- 雙欄並排數據表 (一列顯示兩步) -->
     <div class="panel tab-panel mobile-hidden" id="tableContainer">
         <div class="table-header-bar">
-            <div class="table-title">每步詳細運動學數據</div>
+            <div class="table-title">每步詳細運動學數據 (一列兩步並排)</div>
             <div class="export-actions">
                 <button id="exportCsvBtn">📥 匯出 CSV</button>
                 <button id="shareLineBtn">💬 分享 LINE</button>
@@ -263,17 +257,27 @@
         </div>
 
         <div class="table-scroll-wrap">
-            <table>
+            <table class="paired-table">
                 <thead>
                     <tr>
+                        <!-- 左欄步數欄位 -->
                         <th>步數</th>
                         <th>觸地腳</th>
-                        <th>時速 (km/h)</th>
-                        <th>觸地 (ms)</th>
-                        <th>騰空 (ms)</th>
-                        <th>步幅 (cm)</th>
-                        <th>右膝屈曲 (°)</th>
-                        <th>右髖屈曲 (°)</th>
+                        <th>時速</th>
+                        <th>觸地</th>
+                        <th>騰空</th>
+                        <th>步幅</th>
+                        <th>右膝</th>
+                        <th class="pair-divider">右髖</th>
+                        <!-- 右欄步數欄位 -->
+                        <th class="right-half-bg">步數</th>
+                        <th class="right-half-bg">觸地腳</th>
+                        <th class="right-half-bg">時速</th>
+                        <th class="right-half-bg">觸地</th>
+                        <th class="right-half-bg">騰空</th>
+                        <th class="right-half-bg">步幅</th>
+                        <th class="right-half-bg">右膝</th>
+                        <th class="right-half-bg">右髖</th>
                     </tr>
                 </thead>
                 <tbody id="stepTableBody">
@@ -320,7 +324,7 @@
     let currentFacingMode = 'environment'; 
     let animationFrameId;
     let isDraggingTimeline = false; 
-    let currentUploadedBlobUrl = null; // 追蹤並釋放舊影片 URL
+    let currentUploadedBlobUrl = null;
     
     let prevAnkleDist = 0; let isIncreasing = false; let lastStepTime = 0; let firstStepTime = 0; 
     let stepCount = 0; let currentStepMaxY = -Infinity; let currentStepMinY = Infinity;
@@ -349,7 +353,7 @@
     let scatterLogs = [];         
     let lastRenderedStepCount = -1;
 
-    // ================= 手機版 UI 互動：展開/收合卡片 & 分頁籤切換 =================
+    // ================= 手機版 UI 互動 =================
     toggleCardsBtn.addEventListener('click', () => {
         const isCollapsed = dashboardEl.classList.toggle('collapsed');
         toggleCardsBtn.innerText = isCollapsed 
@@ -372,7 +376,6 @@
         });
     });
 
-    // ================= 統一重設畫布尺寸函式 (解決切換影片/攝影機畫面大小異常) =================
     function syncCanvasAspectRatio(width, height) {
         if (!width || !height) return;
         const ratio = width / height;
@@ -474,7 +477,7 @@
                     }
                     if (pointData.step) { 
                         switchMobileTab('tableContainer');
-                        setTimeout(() => highlightTableRow(pointData.step), 50);
+                        setTimeout(() => highlightTableStep(pointData.step), 50);
                     }
                 }
             },
@@ -487,17 +490,57 @@
 
     toggleStepLabels.addEventListener('change', () => { gctHeightChart.update(); });
 
-    function highlightTableRow(stepNum) {
-        document.querySelectorAll('#stepTableBody tr').forEach(tr => tr.classList.remove('highlight-row'));
-        const targetRow = document.getElementById(`step_row_${stepNum}`);
-        if (targetRow) {
-            targetRow.classList.add('highlight-row');
-            targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            setTimeout(() => { targetRow.classList.remove('highlight-row'); }, 3000);
+    // 高亮雙欄表格中指定步數的該半邊 (8 格儲存格)
+    function highlightTableStep(stepNum) {
+        document.querySelectorAll('#stepTableBody td').forEach(td => td.classList.remove('highlight-half'));
+        const targetCells = document.querySelectorAll(`#stepTableBody td[data-step="${stepNum}"]`);
+        if (targetCells.length > 0) {
+            targetCells.forEach(td => td.classList.add('highlight-half'));
+            targetCells[0].parentElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => {
+                targetCells.forEach(td => td.classList.remove('highlight-half'));
+            }, 3000);
         }
     }
 
-    // ================= 核心：依據指定時間點同步所有儀表板、圖表與表格 =================
+    // ================= 產生單步 8 格 HTML 儲存格的輔助函式 =================
+    function buildStepCellsHtml(r, targetTime, isRightHalf) {
+        const bgClass = isRightHalf ? "right-half-bg" : "";
+        if (!r) {
+            return `
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+                <td class="${bgClass} empty-slot">-</td>
+            `;
+        }
+
+        const dividerClass = !isRightHalf ? "pair-divider" : "";
+        const isGctReady = (r.gct !== null && r.gctEndTime <= targetTime + 0.001);
+        const gctText = isGctReady ? r.gct : "...";
+        const gctClass = isGctReady ? (r.isLeft ? "foot-l" : "foot-r") : "calculating";
+
+        const isFlightReady = (r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
+        const flightText = isFlightReady ? r.flightTime : "-";
+        const flightClass = isFlightReady ? "flight-val" : "calculating";
+
+        return `
+            <td data-step="${r.step}" class="${bgClass}"><b>#${r.step}</b></td>
+            <td data-step="${r.step}" class="${bgClass} ${r.isLeft ? 'foot-l' : 'foot-r'}">${r.isLeft ? '左 (L)' : '右 (R)'}</td>
+            <td data-step="${r.step}" class="${bgClass} speed-val">${r.speed !== null ? r.speed.toFixed(1) : '-'}</td>
+            <td data-step="${r.step}" class="${bgClass} ${gctClass}">${gctText}</td>
+            <td data-step="${r.step}" class="${bgClass} ${flightClass}">${flightText}</td>
+            <td data-step="${r.step}" class="${bgClass}">${r.stride.toFixed(1)}</td>
+            <td data-step="${r.step}" class="${bgClass}">${r.knee !== null ? r.knee.toFixed(1) + '°' : '-'}</td>
+            <td data-step="${r.step}" class="${bgClass} ${dividerClass}">${r.hip !== null ? r.hip.toFixed(1) + '°' : '-'}</td>
+        `;
+    }
+
+    // ================= 核心：依據指定時間點同步所有儀表板、圖表與雙欄表格 =================
     function syncAllVisualsToTime(targetTime, forceRebuildTable = false) {
         const validSteps = stepRecords.filter(r => r.time <= targetTime + 0.001);
 
@@ -607,31 +650,15 @@
             ? (validSteps.reduce((a, b) => a + b.stride, 0) / validSteps.length).toFixed(1) 
             : "0.0";
 
-        // 8. 同步下方詳細數據表格
+        // 8. 同步雙欄並排數據表格 (一列兩步：最新兩步在最上方)
         if (forceRebuildTable || validSteps.length !== lastRenderedStepCount) {
             stepTableBody.innerHTML = "";
-            for (let i = validSteps.length - 1; i >= 0; i--) {
-                const r = validSteps[i];
-                const isGctReady = (r.gct !== null && r.gctEndTime <= targetTime + 0.001);
-                const gctText = isGctReady ? r.gct : "運算中...";
-                const gctClass = isGctReady ? (r.isLeft ? "foot-l" : "foot-r") : "calculating";
-
-                const isFlightReady = (r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
-                const flightText = isFlightReady ? r.flightTime : "-";
-                const flightClass = isFlightReady ? "flight-val" : "calculating";
-
+            const reversedSteps = [...validSteps].reverse();
+            for (let i = 0; i < reversedSteps.length; i += 2) {
+                const leftStep = reversedSteps[i];
+                const rightStep = reversedSteps[i + 1] || null;
                 const row = document.createElement('tr');
-                row.id = `step_row_${r.step}`;
-                row.innerHTML = `
-                    <td>${r.step}</td>
-                    <td class="${r.isLeft ? 'foot-l' : 'foot-r'}">${r.isLeft ? '左腳 (L)' : '右腳 (R)'}</td>
-                    <td class="speed-val">${r.speed !== null ? r.speed.toFixed(1) : '-'}</td>
-                    <td id="gct_cell_${r.step}" class="${gctClass}">${gctText}</td>
-                    <td class="${flightClass}">${flightText}</td>
-                    <td>${r.stride.toFixed(1)}</td>
-                    <td>${r.knee !== null ? r.knee.toFixed(1) : '-'}</td>
-                    <td>${r.hip !== null ? r.hip.toFixed(1) : '-'}</td>
-                `;
+                row.innerHTML = buildStepCellsHtml(leftStep, targetTime, false) + buildStepCellsHtml(rightStep, targetTime, true);
                 stepTableBody.appendChild(row);
             }
             lastRenderedStepCount = validSteps.length;
@@ -694,10 +721,11 @@
         }
     });
 
-    // ================= 匯出 CSV 與 LINE 分享邏輯 =================
+    // ================= 匯出 CSV 與 LINE 分享邏輯 (直接從 stepRecords 匯出標準單步格式) =================
     function generateCsvContent() {
-        const rows = Array.from(stepTableBody.querySelectorAll('tr'));
-        if (rows.length === 0) return null;
+        const targetTime = cameraActive ? Infinity : parseFloat(videoSlider.value);
+        const validSteps = stepRecords.filter(r => r.time <= targetTime + 0.001);
+        if (validSteps.length === 0) return null;
 
         const symVal = document.getElementById('symmetry_display').innerText;
         const symDetail = document.getElementById('symmetry_detail').innerText;
@@ -714,14 +742,20 @@
         csvLines.push(""); 
         csvLines.push("步數,觸地腳,單步時速(km/h),單步觸地時間(ms),騰空時間(ms),跨步步幅(cm),右膝最大屈曲(°),右髖最大屈曲(°)");
 
-        const chronologicalRows = rows.reverse();
-        chronologicalRows.forEach(tr => {
-            const cells = Array.from(tr.querySelectorAll('td')).map(td => {
-                let text = td.innerText.trim();
-                if (text === "運算中...") text = "-";
-                return `"${text}"`;
-            });
-            csvLines.push(cells.join(","));
+        validSteps.forEach(r => {
+            const isGctReady = (r.gct !== null && r.gctEndTime <= targetTime + 0.001);
+            const isFlightReady = (r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
+            const rowVals = [
+                r.step,
+                r.isLeft ? "左腳 (L)" : "右腳 (R)",
+                r.speed !== null ? r.speed.toFixed(1) : "-",
+                isGctReady ? r.gct : "-",
+                isFlightReady ? r.flightTime : "-",
+                r.stride.toFixed(1),
+                r.knee !== null ? r.knee.toFixed(1) : "-",
+                r.hip !== null ? r.hip.toFixed(1) : "-"
+            ].map(v => `"${v}"`);
+            csvLines.push(rowVals.join(","));
         });
 
         return "\uFEFF" + csvLines.join("\n");
@@ -762,7 +796,8 @@
             return;
         }
 
-        const visibleSteps = stepTableBody.querySelectorAll('tr').length;
+        const targetTime = cameraActive ? Infinity : parseFloat(videoSlider.value);
+        const visibleStepsCount = stepRecords.filter(r => r.time <= targetTime + 0.001).length;
         const avgSpeed = document.getElementById('avg_speed').innerText;
         const avgGct = document.getElementById('gct_display').innerText;
         const avgFlight = document.getElementById('flight_display').innerText;
@@ -776,7 +811,7 @@
         const summaryText = 
 `🏃‍♂️ 跑步姿態生物力學分析報表
 ━━━━━━━━━━━━━━
-📊 分析步數：${visibleSteps} 步
+📊 分析步數：${visibleStepsCount} 步
 ⚡ 平均時速：${avgSpeed} km/h
 ⏱️ 平均觸地時間：${avgGct} ms
 🚀 平均騰空時間：${avgFlight} ms
@@ -838,7 +873,6 @@
     pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
     pose.onResults((results) => {
-        // 動態防呆：若畫布比例與當前串流影像比例不一致，立即自動修正
         if (results.image && results.image.width && results.image.height) {
             const imgRatio = results.image.width / results.image.height;
             const canvasRatio = canvasElement.width / canvasElement.height;
@@ -1139,7 +1173,6 @@
     async function startCameraWithFacingMode(mode) {
         stopCameraStream();
         
-        // 徹底清除先前匯入影片的 src 與比例殘留，強制重設回標準 4:3 (640x480)
         if (currentUploadedBlobUrl) {
             URL.revokeObjectURL(currentUploadedBlobUrl);
             currentUploadedBlobUrl = null;
@@ -1222,7 +1255,6 @@
     }
 
     videoElement.addEventListener('loadedmetadata', () => {
-        // 無論是攝影機串流還是匯入影片，載入詮釋資料時一律自動校準畫布真實比例
         syncCanvasAspectRatio(videoElement.videoWidth, videoElement.videoHeight);
         
         if (!cameraActive) {
