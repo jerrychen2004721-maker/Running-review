@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>跑步姿態分析 - 專業深色介面版</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -12,7 +11,7 @@
         /* 深色模式全局設定 */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px 10px; }
         
-        /* 統一排版容器：限制最大寬度與垂直間距 */
+        /* 統一排版容器 */
         .container-main { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
         h2 { margin-top: 0; color: #ffffff; letter-spacing: 1px; }
 
@@ -21,10 +20,13 @@
 
         /* 控制列 */
         .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
-        .btn-group button { padding: 10px 20px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.2s; }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .btn-group button { padding: 10px 18px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.2s; }
         #startBtn { background-color: #27ae60; } #startBtn:hover { background-color: #2ecc71; }
+        #switchCamBtn { background-color: #8e44ad; display: none; } #switchCamBtn:hover { background-color: #9b59b6; }
         #uploadBtn { background-color: #2980b9; } #uploadBtn:hover { background-color: #3498db; }
-        .calibration { font-size: 1em; color: #bbb; display: flex; align-items: center; gap: 10px; }
+        
+        .calibration { font-size: 1em; color: #bbb; display: flex; align-items: center; gap: 10px; justify-content: center; }
         .calibration input { font-size: 1em; width: 70px; text-align: center; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 4px; }
 
         /* 影像與骨架區塊 (CSS Grid 2欄) */
@@ -41,7 +43,7 @@
         input[type="range"] { flex-grow: 1; cursor: pointer; accent-color: #f39c12; }
         .time-display { font-family: monospace; font-size: 1.1em; color: #aaa; min-width: 100px; text-align: right; }
 
-        /* 儀表板 (自動適應欄位) */
+        /* 儀表板 */
         #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
         .card { background: #1e1e1e; padding: 15px 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .card .title { font-size: 0.9em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
@@ -64,7 +66,7 @@
         .foot-r { color: #ec7063; font-weight: bold; } 
         .calculating { color: #7f8c8d; font-style: italic; font-size: 0.85em; }
 
-        /* 響應式佈局：螢幕較小時轉為單欄 */
+        /* 響應式佈局 */
         @media (max-width: 900px) {
             .visual-section, .charts-container { grid-template-columns: 1fr; }
             .controls { flex-direction: column; align-items: stretch; }
@@ -79,6 +81,7 @@
     <div class="panel controls">
         <div class="btn-group">
             <button id="startBtn">啟動攝影機</button>
+            <button id="switchCamBtn">切換鏡頭 (目前: 後置)</button>
             <button id="uploadBtn">匯入影片</button>
             <input type="file" id="videoUpload" accept="video/mp4,video/x-m4v,video/*" style="display: none;">
         </div>
@@ -90,7 +93,7 @@
     <div class="visual-section">
         <div class="canvas-wrapper">
             <div class="canvas-label">原始影像 + 骨架追蹤</div>
-            <video id="input_video" width="640" height="480" autoplay playsinline muted></video>
+            <video id="input_video" autoplay playsinline muted></video>
             <canvas id="output_canvas" width="640" height="480"></canvas>
         </div>
         
@@ -116,7 +119,6 @@
     </div>
 
     <div class="panel charts-container">
-        <!-- 刪除角度圖，剩下 4 張圖表完美填滿 2x2 網格 -->
         <div class="chart-box"><canvas id="trajChart"></canvas></div>
         <div class="chart-box"><canvas id="gctHeightChart"></canvas></div>
         <div class="chart-box"><canvas id="comChart"></canvas></div>
@@ -142,8 +144,6 @@
 </div>
 
 <script>
-    // ================= 初始化與全局設定 =================
-    // 設定 Chart.js 深色模式
     Chart.defaults.color = '#aaaaaa';
     Chart.defaults.borderColor = '#333333';
 
@@ -154,6 +154,7 @@
     const skelCtx = skelCanvasElement.getContext('2d');
 
     const startBtn = document.getElementById('startBtn');
+    const switchCamBtn = document.getElementById('switchCamBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const videoUpload = document.getElementById('videoUpload');
     const stepTableBody = document.getElementById('stepTableBody');
@@ -164,7 +165,11 @@
     const currentTimeDisplay = document.getElementById('currentTimeDisplay');
     const durationDisplay = document.getElementById('durationDisplay');
     
-    let cameraActive = false; let animationFrameId;
+    // 攝影機控制變數
+    let cameraActive = false; 
+    let currentStream = null;
+    let currentFacingMode = 'environment'; // 預設使用後置鏡頭 ('environment' = 後置, 'user' = 前置)
+    let animationFrameId;
     let isDraggingTimeline = false; 
     
     let prevAnkleDist = 0; let isIncreasing = false; let lastStepTime = 0; let firstStepTime = 0; 
@@ -182,7 +187,7 @@
 
     let gctHistory = []; let oscHistory = [];
 
-    // ================= 圖表初始化 (4張) =================
+    // ================= 圖表初始化 =================
     const maxDataPoints = 90; const trajMaxPoints = 55;
     const chartOptions = { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false } }, elements: { point: { radius: 0 } }, plugins: { legend: { labels: { font: { size: 11 } } } } };
 
@@ -436,20 +441,78 @@
         skelCtx.restore();
     });
 
-    const camera = new Camera(videoElement, { onFrame: async () => { if(cameraActive) await pose.send({image: videoElement}); }, width: 640, height: 480 });
-    
+    // ================= 原生攝影機控制與鏡頭切換邏輯 =================
+    function stopCameraStream() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+        }
+        cancelAnimationFrame(animationFrameId);
+        videoElement.srcObject = null;
+        cameraActive = false;
+        startBtn.innerText = "啟動攝影機";
+        startBtn.style.backgroundColor = "#27ae60";
+        switchCamBtn.style.display = "none";
+    }
+
+    async function startCameraWithFacingMode(mode) {
+        stopCameraStream();
+        try {
+            const constraints = {
+                video: {
+                    facingMode: mode,
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            };
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            videoElement.srcObject = currentStream;
+            await videoElement.play();
+            
+            cameraActive = true;
+            startBtn.innerText = "關閉攝影機";
+            startBtn.style.backgroundColor = "#c0392b";
+            
+            // 顯示切換鏡頭按鈕並更新文字
+            switchCamBtn.style.display = "inline-block";
+            switchCamBtn.innerText = mode === 'environment' ? "切換鏡頭 (目前: 後置)" : "切換鏡頭 (目前: 前置)";
+            
+            processVideoFrame();
+        } catch (err) {
+            console.error("無法開啟攝影機:", err);
+            alert("無法開啟攝影機，請確認已允許網頁存取相機權限，或此裝置支援該鏡頭。");
+            stopCameraStream();
+        }
+    }
+
     startBtn.addEventListener('click', () => {
-        if (!videoElement.paused) videoElement.pause(); cancelAnimationFrame(animationFrameId);
+        if (!videoElement.paused && !cameraActive) videoElement.pause();
         timelineSection.style.display = 'none'; 
-        if (!cameraActive) { resetData(); camera.start(); startBtn.innerText = "關閉攝影機"; cameraActive = true; } 
-        else { camera.stop(); videoElement.srcObject = null; startBtn.innerText = "啟動攝影機"; cameraActive = false; canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height); skelCtx.clearRect(0, 0, skelCanvasElement.width, skelCanvasElement.height); }
+        
+        if (!cameraActive) {
+            resetData();
+            startCameraWithFacingMode(currentFacingMode);
+        } else {
+            stopCameraStream();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            skelCtx.clearRect(0, 0, skelCanvasElement.width, skelCanvasElement.height);
+        }
+    });
+
+    // 切換前後鏡頭事件
+    switchCamBtn.addEventListener('click', () => {
+        if (!cameraActive) return;
+        currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+        resetData(); // 切換鏡頭視角改變，清空舊數據重新計算
+        startCameraWithFacingMode(currentFacingMode);
     });
     
     uploadBtn.addEventListener('click', () => videoUpload.click());
     
     videoUpload.addEventListener('change', (event) => {
         const file = event.target.files[0]; if (!file) return;
-        if (cameraActive) { camera.stop(); startBtn.innerText = "啟動攝影機"; cameraActive = false; }
+        if (cameraActive) stopCameraStream();
         resetData(); 
         timelineSection.style.display = 'flex'; 
         playPauseBtn.innerText = "暫停";
@@ -457,25 +520,33 @@
     });
 
     async function processVideoFrame() {
-        if (!videoElement.paused && !videoElement.ended) { 
-            await pose.send({image: videoElement}); 
+        if ((!videoElement.paused && !videoElement.ended) || cameraActive) { 
+            if (videoElement.readyState >= 2) {
+                await pose.send({image: videoElement}); 
+            }
             animationFrameId = requestAnimationFrame(processVideoFrame); 
         }
     }
 
     videoElement.addEventListener('loadedmetadata', () => {
-        videoSlider.max = videoElement.duration;
-        durationDisplay.innerText = videoElement.duration.toFixed(2);
+        // 動態調整 Canvas 比例以適應直式或橫式鏡頭/影片
         const ratio = videoElement.videoWidth / videoElement.videoHeight;
         canvasElement.width = 640; canvasElement.height = 640 / ratio; 
         skelCanvasElement.width = 640; skelCanvasElement.height = 640 / ratio; 
-        videoElement.play();
+        
+        if (!cameraActive) {
+            videoSlider.max = videoElement.duration;
+            durationDisplay.innerText = videoElement.duration.toFixed(2);
+            videoElement.play();
+        }
     });
 
-    videoElement.addEventListener('play', processVideoFrame);
+    videoElement.addEventListener('play', () => {
+        if (!cameraActive) processVideoFrame();
+    });
 
     videoElement.addEventListener('timeupdate', () => {
-        if (!isDraggingTimeline) {
+        if (!isDraggingTimeline && !cameraActive) {
             videoSlider.value = videoElement.currentTime;
             currentTimeDisplay.innerText = videoElement.currentTime.toFixed(2);
         }
