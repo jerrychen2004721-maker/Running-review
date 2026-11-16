@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 專業深色介面版 (逐格微調版)</title>
+    <title>跑步姿態分析 - 專業深色介面版 (含左右腳對稱性分析)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -43,13 +43,21 @@
         input[type="range"] { flex-grow: 1; min-width: 150px; cursor: pointer; accent-color: #f39c12; }
         .time-display { font-family: monospace; font-size: 1.1em; color: #aaa; min-width: 110px; text-align: right; }
 
-        #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
-        .card { background: #1e1e1e; padding: 15px 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .card .title { font-size: 0.85em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
-        .card .value { font-size: 1.7em; font-weight: bold; color: #fff; margin-top: 8px; }
+        /* 儀表板：6 張卡片自適應排列 */
+        #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
+        .card { background: #1e1e1e; padding: 15px 12px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: border-color 0.3s; }
+        .card .title { font-size: 0.82em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+        .card .value { font-size: 1.65em; font-weight: bold; color: #fff; margin-top: 6px; }
         .card .unit { font-size: 0.5em; color: #777; margin-left: 4px; font-weight: normal; }
+        .card .sub-info { font-size: 0.75em; color: #888; margin-top: 6px; font-weight: 500; }
         .card.gct-card { border-bottom: 4px solid #e74c3c; }
         .card.speed-card { border-bottom: 4px solid #2ecc71; }
+        .card.sym-card { border-bottom: 4px solid #3498db; }
+
+        /* 對稱性狀態燈號顏色 */
+        .sym-good { color: #2ecc71 !important; }
+        .sym-warn { color: #f1c40f !important; }
+        .sym-risk { color: #e74c3c !important; }
 
         .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .chart-box { height: 235px; width: 100%; position: relative; display: flex; flex-direction: column; }
@@ -58,7 +66,6 @@
         .toggle-label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #f1c40f; font-weight: bold; user-select: none; }
         .toggle-label input { cursor: pointer; accent-color: #f1c40f; }
 
-        /* 表格工具列與匯出按鈕樣式 */
         .table-header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #333; }
         .table-title { font-size: 1.1em; font-weight: bold; color: #fff; letter-spacing: 0.5px; }
         .export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -117,7 +124,6 @@
         </div>
     </div>
 
-    <!-- 時間軸與逐格微調控制列 -->
     <div class="panel timeline-container" id="timelineSection">
         <div class="timeline-btns">
             <button id="prevFrameBtn" class="step-frame-btn" title="快捷鍵：鍵盤左方向鍵 ←">⏮ 上一格 (-0.03s)</button>
@@ -133,6 +139,12 @@
     <div id="dashboard">
         <div class="card speed-card"><div class="title">平均跑步時速</div><div class="value"><span id="avg_speed">0.0</span><span class="unit">km/h</span></div></div>
         <div class="card gct-card"><div class="title">平均觸地時間</div><div class="value"><span id="gct_display">0</span><span class="unit">ms</span></div></div>
+        <!-- 新增：左右腳觸地對稱性 (%) 卡片 -->
+        <div class="card sym-card" id="symmetryCard">
+            <div class="title">左右腳觸地對稱性</div>
+            <div class="value"><span id="symmetry_display">-</span><span class="unit">%</span></div>
+            <div class="sub-info" id="symmetry_detail">等待雙腳觸地數據...</div>
+        </div>
         <div class="card"><div class="title">平均垂直振幅</div><div class="value"><span id="vertical_oscillation">0.0</span><span class="unit">cm</span></div></div>
         <div class="card"><div class="title">平均步頻</div><div class="value"><span id="cadence">0</span><span class="unit">SPM</span></div></div>
         <div class="card"><div class="title">平均跨距</div><div class="value"><span id="avg_stride">0.0</span><span class="unit">cm</span></div></div>
@@ -240,8 +252,52 @@
     let nextFootIsLeft = null; 
 
     let gctHistory = []; 
+    let leftGctHistory = [];  // 新增：左腳 GCT 紀錄
+    let rightGctHistory = []; // 新增：右腳 GCT 紀錄
     let oscHistory = [];
     let speedHistory = []; 
+
+    // ================= 計算並更新左右腳對稱性指數 =================
+    function updateSymmetryDashboard() {
+        const symDisplay = document.getElementById('symmetry_display');
+        const symDetail = document.getElementById('symmetry_detail');
+        const symCard = document.getElementById('symmetryCard');
+
+        if (leftGctHistory.length === 0 || rightGctHistory.length === 0) {
+            symDisplay.innerText = "-";
+            symDisplay.className = "";
+            symDetail.innerText = `L: ${leftGctHistory.length} 步 | R: ${rightGctHistory.length} 步`;
+            return;
+        }
+
+        const avgL = leftGctHistory.reduce((a, b) => a + b, 0) / leftGctHistory.length;
+        const avgR = rightGctHistory.reduce((a, b) => a + b, 0) / rightGctHistory.length;
+        const meanGct = (avgL + avgR) / 2;
+
+        // 生物力學對稱性指數 (Symmetry Index): 差異百分比 = |L - R| / 0.5*(L + R) * 100%
+        const asymmetryPct = (Math.abs(avgL - avgR) / meanGct) * 100;
+        const symmetryPct = Math.max(0, 100 - asymmetryPct);
+
+        symDisplay.innerText = symmetryPct.toFixed(1);
+        symDisplay.className = "";
+
+        let statusTag = "";
+        if (symmetryPct >= 95.0) {
+            symDisplay.classList.add('sym-good');
+            symCard.style.borderBottomColor = '#2ecc71';
+            statusTag = "🟢 良好";
+        } else if (symmetryPct >= 90.0) {
+            symDisplay.classList.add('sym-warn');
+            symCard.style.borderBottomColor = '#f1c40f';
+            statusTag = "🟡 輕微失衡";
+        } else {
+            symDisplay.classList.add('sym-risk');
+            symCard.style.borderBottomColor = '#e74c3c';
+            statusTag = "🔴 失衡警示";
+        }
+
+        symDetail.innerText = `${statusTag} (L:${Math.round(avgL)} / R:${Math.round(avgR)}ms)`;
+    }
 
     // ================= 自訂外掛：在圓點正上方直接繪製第幾步 =================
     const stepLabelsPlugin = {
@@ -373,7 +429,6 @@
         seekVideoToTime(videoElement.currentTime + 0.03);
     });
 
-    // 鍵盤左右方向鍵快捷微調 (避免在輸入身高時誤觸)
     document.addEventListener('keydown', (e) => {
         if (document.activeElement.tagName === 'INPUT') return;
         if (timelineSection.style.display === 'flex' && !cameraActive) {
@@ -392,11 +447,14 @@
         const rows = Array.from(stepTableBody.querySelectorAll('tr'));
         if (rows.length === 0) return null;
 
+        const symVal = document.getElementById('symmetry_display').innerText;
+        const symDetail = document.getElementById('symmetry_detail').innerText;
+
         let csvLines = [];
         csvLines.push("跑者矢狀面動態分析報表");
         csvLines.push(`匯出時間,${new Date().toLocaleString('zh-TW')}`);
         csvLines.push(`設定身高(cm),${document.getElementById('userHeight').value}`);
-        csvLines.push(`平均時速(km/h),${document.getElementById('avg_speed').innerText},平均觸地時間(ms),${document.getElementById('gct_display').innerText},平均垂直振幅(cm),${document.getElementById('vertical_oscillation').innerText},平均步頻(SPM),${document.getElementById('cadence').innerText},平均跨距(cm),${document.getElementById('avg_stride').innerText}`);
+        csvLines.push(`平均時速(km/h),${document.getElementById('avg_speed').innerText},平均觸地時間(ms),${document.getElementById('gct_display').innerText},左右腳觸地對稱性(%),${symVal} (${symDetail}),平均垂直振幅(cm),${document.getElementById('vertical_oscillation').innerText},平均步頻(SPM),${document.getElementById('cadence').innerText},平均跨距(cm),${document.getElementById('avg_stride').innerText}`);
         csvLines.push(""); 
         csvLines.push("步數,觸地腳,單步時速(km/h),單步觸地時間(ms),跨步步幅(cm),右膝最大屈曲(°),右髖最大屈曲(°)");
 
@@ -450,6 +508,8 @@
 
         const avgSpeed = document.getElementById('avg_speed').innerText;
         const avgGct = document.getElementById('gct_display').innerText;
+        const symVal = document.getElementById('symmetry_display').innerText;
+        const symDetail = document.getElementById('symmetry_detail').innerText;
         const avgOsc = document.getElementById('vertical_oscillation').innerText;
         const avgCadence = document.getElementById('cadence').innerText;
         const avgStride = document.getElementById('avg_stride').innerText;
@@ -460,6 +520,7 @@
 📊 總分析步數：${stepCount} 步
 ⚡ 平均時速：${avgSpeed} km/h
 ⏱️ 平均觸地時間：${avgGct} ms
+⚖️ 左右腳對稱性：${symVal}% (${symDetail})
 📈 平均垂直振幅：${avgOsc} cm
 👟 平均步頻：${avgCadence} SPM
 📏 平均跨距：${avgStride} cm
@@ -493,12 +554,19 @@
         pendingLeftStepNum = null; pendingRightStepNum = null;
         pendingLeftStepTime = null; pendingRightStepTime = null;
         stepMinKneeAngle = 180; stepMinHipAngle = 180; nextFootIsLeft = null; 
-        gctHistory = []; oscHistory = []; speedHistory = [];
+        gctHistory = []; leftGctHistory = []; rightGctHistory = []; oscHistory = []; speedHistory = [];
         lastLeftStepInfo = null; lastRightStepInfo = null; leftMaxSwingHeight = 0; rightMaxSwingHeight = 0;
 
         document.getElementById('avg_speed').innerText = "0.0";
         document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
         document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
+        
+        const symDisplay = document.getElementById('symmetry_display');
+        symDisplay.innerText = "-";
+        symDisplay.className = "";
+        document.getElementById('symmetry_detail').innerText = "等待雙腳觸地數據...";
+        document.getElementById('symmetryCard').style.borderBottomColor = '#3498db';
+
         stepTableBody.innerHTML = ""; 
         
         [comChart, strideChart].forEach(c => { c.data.labels = []; c.data.datasets[0].data = []; c.update(); });
@@ -601,6 +669,7 @@
                     if (!isLeftGrounded) leftMaxSwingHeight = Math.max(leftMaxSwingHeight, leftHeightCm);
                     if (!isRightGrounded) rightMaxSwingHeight = Math.max(rightMaxSwingHeight, rightHeightCm);
 
+                    // 左腳觸地與離地判定
                     const currentLeftGrounded = leftAnkle.y > (dynamicGroundY - groundTolerance);
                     if (currentLeftGrounded && !isLeftGrounded) { 
                         leftContactStartTime = currentTime; 
@@ -624,7 +693,10 @@
                             }; 
                             leftMaxSwingHeight = 0; 
                             gctHistory.push(gctMs);
+                            leftGctHistory.push(gctMs); // 記錄左腳 GCT
                             document.getElementById('gct_display').innerText = Math.round(gctHistory.reduce((a,b)=>a+b,0)/gctHistory.length); 
+                            updateSymmetryDashboard(); // 更新對稱性指標
+
                             if (pendingLeftCellId) {
                                 const cell = document.getElementById(pendingLeftCellId);
                                 if (cell) { cell.innerText = gctMs; cell.classList.remove('calculating'); cell.classList.add('foot-l'); }
@@ -636,6 +708,7 @@
                     }
                     isLeftGrounded = currentLeftGrounded;
 
+                    // 右腳觸地與離地判定
                     const currentRightGrounded = rightAnkle.y > (dynamicGroundY - groundTolerance);
                     if (currentRightGrounded && !isRightGrounded) { 
                         rightContactStartTime = currentTime; 
@@ -659,7 +732,10 @@
                             }; 
                             rightMaxSwingHeight = 0;
                             gctHistory.push(gctMs);
+                            rightGctHistory.push(gctMs); // 記錄右腳 GCT
                             document.getElementById('gct_display').innerText = Math.round(gctHistory.reduce((a,b)=>a+b,0)/gctHistory.length); 
+                            updateSymmetryDashboard(); // 更新對稱性指標
+
                             if (pendingRightCellId) {
                                 const cell = document.getElementById(pendingRightCellId);
                                 if (cell) { cell.innerText = gctMs; cell.classList.remove('calculating'); cell.classList.add('foot-r'); }
