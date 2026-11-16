@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 專業深色介面版 (圖表直接標示步數)</title>
+    <title>跑步姿態分析 - 專業深色介面版 (匯出CSV與LINE分享)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -16,7 +16,8 @@
 
         .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-        .btn-group button { padding: 10px 18px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.2s; }
+        .btn-group button, .export-actions button { padding: 10px 18px; font-size: 0.95em; cursor: pointer; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.2s, transform 0.1s; }
+        .btn-group button:active, .export-actions button:active { transform: scale(0.98); }
         #startBtn { background-color: #27ae60; } #startBtn:hover { background-color: #2ecc71; }
         #switchCamBtn { background-color: #8e44ad; display: none; } #switchCamBtn:hover { background-color: #9b59b6; }
         #uploadBtn { background-color: #2980b9; } #uploadBtn:hover { background-color: #3498db; }
@@ -51,7 +52,14 @@
         .toggle-label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #f1c40f; font-weight: bold; user-select: none; }
         .toggle-label input { cursor: pointer; accent-color: #f1c40f; }
 
-        .table-container { overflow-x: auto; max-height: 400px; overflow-y: auto; scroll-behavior: smooth; }
+        /* 表格工具列與匯出按鈕樣式 */
+        .table-header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #333; }
+        .table-title { font-size: 1.1em; font-weight: bold; color: #fff; letter-spacing: 0.5px; }
+        .export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        #exportCsvBtn { background-color: #2980b9; } #exportCsvBtn:hover { background-color: #3498db; }
+        #shareLineBtn { background-color: #06C755; } #shareLineBtn:hover { background-color: #05b34c; }
+
+        .table-scroll-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; scroll-behavior: smooth; }
         table { width: 100%; border-collapse: collapse; text-align: center; }
         th, td { padding: 12px 10px; border-bottom: 1px solid #333; font-size: 0.95em; color: #ddd; }
         th { background-color: #2a2a2a; color: #fff; position: sticky; top: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 1; letter-spacing: 0.5px; }
@@ -68,7 +76,8 @@
 
         @media (max-width: 900px) {
             .visual-section, .charts-container { grid-template-columns: 1fr; }
-            .controls { flex-direction: column; align-items: stretch; }
+            .controls, .table-header-bar { flex-direction: column; align-items: stretch; }
+            .export-actions { justify-content: center; }
         }
     </style>
 </head>
@@ -140,22 +149,33 @@
         </div>
     </div>
 
-    <div class="panel table-container" id="tableContainer">
-        <table>
-            <thead>
-                <tr>
-                    <th>步數</th>
-                    <th>觸地腳</th>
-                    <th>單步時速 (km/h)</th>
-                    <th>單步觸地時間 (ms)</th>
-                    <th>跨步步幅 (cm)</th>
-                    <th>右膝最大屈曲 (°)</th>
-                    <th>右髖最大屈曲 (°)</th>
-                </tr>
-            </thead>
-            <tbody id="stepTableBody">
-            </tbody>
-        </table>
+    <div class="panel" id="tableContainer">
+        <!-- 新增：報表匯出與 LINE 分享工具列 -->
+        <div class="table-header-bar">
+            <div class="table-title">每步詳細運動學數據表</div>
+            <div class="export-actions">
+                <button id="exportCsvBtn">📥 匯出 CSV 報表</button>
+                <button id="shareLineBtn">💬 分享至 LINE</button>
+            </div>
+        </div>
+
+        <div class="table-scroll-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>步數</th>
+                        <th>觸地腳</th>
+                        <th>單步時速 (km/h)</th>
+                        <th>單步觸地時間 (ms)</th>
+                        <th>跨步步幅 (cm)</th>
+                        <th>右膝最大屈曲 (°)</th>
+                        <th>右髖最大屈曲 (°)</th>
+                    </tr>
+                </thead>
+                <tbody id="stepTableBody">
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -175,6 +195,8 @@
     const videoUpload = document.getElementById('videoUpload');
     const stepTableBody = document.getElementById('stepTableBody');
     const toggleStepLabels = document.getElementById('toggleStepLabels');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const shareLineBtn = document.getElementById('shareLineBtn');
     
     const timelineSection = document.getElementById('timelineSection');
     const playPauseBtn = document.getElementById('playPauseBtn');
@@ -229,14 +251,12 @@
                     if (dataPoint && dataPoint.step) {
                         const text = `#${dataPoint.step}`;
                         const x = element.x;
-                        const y = element.y - 7; // 位於圓點正上方 7px
+                        const y = element.y - 7;
 
-                        // 繪製深色外框陰影，確保文字與圓點重疊時依然清晰可讀
                         ctx.lineWidth = 3;
                         ctx.strokeStyle = 'rgba(18, 18, 18, 0.9)';
                         ctx.strokeText(text, x, y);
 
-                        // 左腳標示淺藍色，右腳標示淺紅色
                         ctx.fillStyle = datasetIndex === 0 ? '#74b9ff' : '#ff7675';
                         ctx.fillText(text, x, y);
                     }
@@ -262,18 +282,13 @@
                 { label: '右腳單步表現 (R)', data: [], backgroundColor: '#e74c3c', pointRadius: 5, pointHoverRadius: 8 }
             ]
         },
-        plugins: [stepLabelsPlugin], // 掛載步數直接標示外掛
+        plugins: [stepLabelsPlugin],
         options: {
             responsive: true, 
             maintainAspectRatio: false, 
             animation: false,
-            layout: {
-                padding: { top: 16 } // 預留上方空間給第 1 步或高點標籤，避免被切掉
-            },
-            interaction: {
-                mode: 'nearest',
-                intersect: true
-            },
+            layout: { padding: { top: 16 } },
+            interaction: { mode: 'nearest', intersect: true },
             plugins: {
                 tooltip: {
                     backgroundColor: 'rgba(30, 30, 30, 0.95)',
@@ -290,10 +305,7 @@
                         },
                         label: function(context) {
                             const raw = context.raw;
-                            return [
-                                `觸地時間: ${raw.x} ms`,
-                                `最大離地高度: ${raw.y.toFixed(1)} cm`
-                            ];
+                            return [ `觸地時間: ${raw.x} ms`, `最大離地高度: ${raw.y.toFixed(1)} cm` ];
                         }
                     }
                 }
@@ -304,10 +316,7 @@
                     const index = elements[0].index;
                     const pointData = gctHeightChart.data.datasets[datasetIndex].data[index];
 
-                    if (pointData.step) {
-                        highlightTableRow(pointData.step);
-                    }
-
+                    if (pointData.step) { highlightTableRow(pointData.step); }
                     if (!cameraActive && pointData.time !== undefined && videoElement.duration) {
                         videoElement.pause();
                         playPauseBtn.innerText = "播放";
@@ -325,10 +334,7 @@
         }
     });
 
-    // 切換步數標籤顯示時即時重繪圖表
-    toggleStepLabels.addEventListener('change', () => {
-        gctHeightChart.update();
-    });
+    toggleStepLabels.addEventListener('change', () => { gctHeightChart.update(); });
 
     function highlightTableRow(stepNum) {
         document.querySelectorAll('#stepTableBody tr').forEach(tr => tr.classList.remove('highlight-row'));
@@ -336,11 +342,116 @@
         if (targetRow) {
             targetRow.classList.add('highlight-row');
             targetRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            setTimeout(() => {
-                targetRow.classList.remove('highlight-row');
-            }, 3000);
+            setTimeout(() => { targetRow.classList.remove('highlight-row'); }, 3000);
         }
     }
+
+    // ================= 匯出 CSV 與 LINE 分享邏輯 =================
+    function generateCsvContent() {
+        const rows = Array.from(stepTableBody.querySelectorAll('tr'));
+        if (rows.length === 0) return null;
+
+        // 建立表頭與摘要資訊
+        let csvLines = [];
+        csvLines.push("跑者矢狀面動態分析報表");
+        csvLines.push(`匯出時間,${new Date().toLocaleString('zh-TW')}`);
+        csvLines.push(`設定身高(cm),${document.getElementById('userHeight').value}`);
+        csvLines.push(`平均時速(km/h),${document.getElementById('avg_speed').innerText},平均觸地時間(ms),${document.getElementById('gct_display').innerText},平均垂直振幅(cm),${document.getElementById('vertical_oscillation').innerText},平均步頻(SPM),${document.getElementById('cadence').innerText},平均跨距(cm),${document.getElementById('avg_stride').innerText}`);
+        csvLines.push(""); // 空行分隔
+        csvLines.push("步數,觸地腳,單步時速(km/h),單步觸地時間(ms),跨步步幅(cm),右膝最大屈曲(°),右髖最大屈曲(°)");
+
+        // 因為表格是最新步數插在最上方，匯出 CSV 時反轉為第 1 步到最後一步，更符合閱讀習慣
+        const chronologicalRows = rows.reverse();
+        chronologicalRows.forEach(tr => {
+            const cells = Array.from(tr.querySelectorAll('td')).map(td => {
+                let text = td.innerText.trim();
+                if (text === "運算中...") text = "-";
+                return `"${text}"`;
+            });
+            csvLines.push(cells.join(","));
+        });
+
+        // 加上 \uFEFF (UTF-8 BOM)，確保 Excel 開啟繁體中文完全不亂碼
+        return "\uFEFF" + csvLines.join("\n");
+    }
+
+    function getFormattedDateString() {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        return `${yyyy}${mm}${dd}_${hh}${min}`;
+    }
+
+    // 1. 下載 CSV 檔案
+    exportCsvBtn.addEventListener('click', () => {
+        const csvContent = generateCsvContent();
+        if (!csvContent) {
+            alert("目前尚無步態數據可匯出，請先啟動攝影機或播放影片進行分析！");
+            return;
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `跑步姿態分析_${getFormattedDateString()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    });
+
+    // 2. 分享至 LINE (支援手機原生傳送 CSV 檔案 + 電腦版文字戰報傳送)
+    shareLineBtn.addEventListener('click', async () => {
+        const csvContent = generateCsvContent();
+        if (!csvContent) {
+            alert("目前尚無步態數據可分享，請先啟動攝影機或播放影片進行分析！");
+            return;
+        }
+
+        const avgSpeed = document.getElementById('avg_speed').innerText;
+        const avgGct = document.getElementById('gct_display').innerText;
+        const avgOsc = document.getElementById('vertical_oscillation').innerText;
+        const avgCadence = document.getElementById('cadence').innerText;
+        const avgStride = document.getElementById('avg_stride').innerText;
+
+        const summaryText = 
+`🏃‍♂️ 跑步姿態生物力學分析報表
+━━━━━━━━━━━━━━
+📊 總分析步數：${stepCount} 步
+⚡ 平均時速：${avgSpeed} km/h
+⏱️ 平均觸地時間：${avgGct} ms
+📈 平均垂直振幅：${avgOsc} cm
+👟 平均步頻：${avgCadence} SPM
+📏 平均跨距：${avgStride} cm
+━━━━━━━━━━━━━━`;
+
+        const fileName = `跑步姿態分析_${getFormattedDateString()}.csv`;
+        const csvFile = new File([csvContent], fileName, { type: 'text/csv' });
+
+        // 優先檢測裝置是否支援直接透過系統分享選單傳送實體檔案 (iOS Safari / Android 皆支援)
+        if (navigator.canShare && navigator.canShare({ files: [csvFile] })) {
+            try {
+                await navigator.share({
+                    title: '跑步姿態分析 CSV 報表',
+                    text: summaryText,
+                    files: [csvFile]
+                });
+                return;
+            } catch (err) {
+                // 若使用者手動取消分享則直接結束，若是其他錯誤則往下執行網頁版 LINE 分享
+                if (err.name === 'AbortError') return;
+                console.warn("原生檔案分享失敗，改用 LINE 文字分享連結:", err);
+            }
+        }
+
+        // 電腦版瀏覽器備案：開啟 LINE 官方分享視窗傳送數據摘要文字
+        const lineShareUrl = `https://line.me/R/msg/text/?${encodeURIComponent(summaryText)}`;
+        window.open(lineShareUrl, '_blank', 'noopener,noreferrer');
+    });
 
     function resetData() {
         prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0; strideHistory = [];
