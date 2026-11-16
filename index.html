@@ -3,22 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 專業深色介面版</title>
+    <title>跑步姿態分析 - 專業深色介面版 (含即時時速)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* 深色模式全局設定 */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px 10px; }
-        
-        /* 統一排版容器 */
         .container-main { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
         h2 { margin-top: 0; color: #ffffff; letter-spacing: 1px; }
 
-        /* 共用面板樣式 */
         .panel { background: #1e1e1e; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; padding: 20px; box-sizing: border-box; }
 
-        /* 控制列 */
         .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
         .btn-group button { padding: 10px 18px; font-size: 1em; cursor: pointer; color: white; border: none; border-radius: 6px; font-weight: bold; transition: background 0.2s; }
@@ -29,33 +24,30 @@
         .calibration { font-size: 1em; color: #bbb; display: flex; align-items: center; gap: 10px; justify-content: center; }
         .calibration input { font-size: 1em; width: 70px; text-align: center; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 4px; }
 
-        /* 影像與骨架區塊 (CSS Grid 2欄) */
         .visual-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; padding: 0; background: transparent; border: none; box-shadow: none; }
         .canvas-wrapper { background: #1e1e1e; padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; }
         .canvas-label { font-weight: bold; margin-bottom: 12px; color: #ccc; font-size: 1.1em; letter-spacing: 0.5px; }
         video { display: none; } 
         canvas { background-color: #000; border-radius: 6px; width: 100%; height: auto; max-width: 640px; }
 
-        /* 時間軸控制列 */
         .timeline-container { display: none; align-items: center; gap: 15px; }
         #playPauseBtn { background-color: #f39c12; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         #playPauseBtn:hover { background-color: #f1c40f; }
         input[type="range"] { flex-grow: 1; cursor: pointer; accent-color: #f39c12; }
         .time-display { font-family: monospace; font-size: 1.1em; color: #aaa; min-width: 100px; text-align: right; }
 
-        /* 儀表板 */
-        #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
-        .card { background: #1e1e1e; padding: 15px 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .card .title { font-size: 0.9em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
-        .card .value { font-size: 1.8em; font-weight: bold; color: #fff; margin-top: 8px; }
+        /* 儀表板：調整為 5 張卡片自適應 */
+        #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
+        .card { background: #1e1e1e; padding: 15px 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .card .title { font-size: 0.85em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+        .card .value { font-size: 1.7em; font-weight: bold; color: #fff; margin-top: 8px; }
         .card .unit { font-size: 0.5em; color: #777; margin-left: 4px; font-weight: normal; }
         .card.gct-card { border-bottom: 4px solid #e74c3c; }
+        .card.speed-card { border-bottom: 4px solid #2ecc71; }
 
-        /* 圖表區塊 (CSS Grid 2x2) */
         .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .chart-box { height: 220px; width: 100%; position: relative; }
 
-        /* 數據表格 */
         .table-container { overflow-x: auto; max-height: 400px; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; text-align: center; }
         th, td { padding: 12px 10px; border-bottom: 1px solid #333; font-size: 0.95em; color: #ddd; }
@@ -64,9 +56,9 @@
         
         .foot-l { color: #5dade2; font-weight: bold; } 
         .foot-r { color: #ec7063; font-weight: bold; } 
+        .speed-val { color: #2ecc71; font-weight: bold; }
         .calculating { color: #7f8c8d; font-style: italic; font-size: 0.85em; }
 
-        /* 響應式佈局 */
         @media (max-width: 900px) {
             .visual-section, .charts-container { grid-template-columns: 1fr; }
             .controls { flex-direction: column; align-items: stretch; }
@@ -112,6 +104,7 @@
     </div>
 
     <div id="dashboard">
+        <div class="card speed-card"><div class="title">當下跑步時速</div><div class="value"><span id="current_speed">0.0</span><span class="unit">km/h</span></div></div>
         <div class="card gct-card"><div class="title">平均觸地時間</div><div class="value"><span id="gct_display">0</span><span class="unit">ms</span></div></div>
         <div class="card"><div class="title">平均垂直振幅</div><div class="value"><span id="vertical_oscillation">0.0</span><span class="unit">cm</span></div></div>
         <div class="card"><div class="title">平均步頻</div><div class="value"><span id="cadence">0</span><span class="unit">SPM</span></div></div>
@@ -131,6 +124,7 @@
                 <tr>
                     <th>步數</th>
                     <th>觸地腳</th>
+                    <th>瞬時時速 (km/h)</th>
                     <th>單步觸地時間 (ms)</th>
                     <th>跨步步幅 (cm)</th>
                     <th>右膝最大屈曲 (°)</th>
@@ -165,10 +159,9 @@
     const currentTimeDisplay = document.getElementById('currentTimeDisplay');
     const durationDisplay = document.getElementById('durationDisplay');
     
-    // 攝影機控制變數
     let cameraActive = false; 
     let currentStream = null;
-    let currentFacingMode = 'environment'; // 預設使用後置鏡頭 ('environment' = 後置, 'user' = 前置)
+    let currentFacingMode = 'environment'; 
     let animationFrameId;
     let isDraggingTimeline = false; 
     
@@ -219,6 +212,7 @@
         gctHistory = []; oscHistory = [];
         lastLeftGCT = null; lastRightGCT = null; leftMaxSwingHeight = 0; rightMaxSwingHeight = 0;
 
+        document.getElementById('current_speed').innerText = "0.0";
         document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
         document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
         stepTableBody.innerHTML = ""; 
@@ -372,13 +366,26 @@
                     if (currentDist > prevAnkleDist) { isIncreasing = true; } 
                     else if (currentDist < prevAnkleDist && isIncreasing) {
                         isIncreasing = false;
-                        if (currentTime - lastStepTime > 0.25) {
+                        const stepDuration = currentTime - lastStepTime;
+                        
+                        if (stepDuration > 0.25) {
                             const strideCm = prevAnkleDist * cmPerUnit;
                             if (strideCm > 30) {
                                 stepCount++; strideHistory.push(strideCm);
                                 if (stepCount === 1) firstStepTime = currentTime;
                                 
-                                let cadence = 0; if (stepCount > 1) cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
+                                let cadence = 0; 
+                                let instantSpeedKmh = 0;
+
+                                if (stepCount > 1) {
+                                    cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
+                                    // 計算瞬時時速: (跨距公尺 / 單步時間秒) * 3.6
+                                    instantSpeedKmh = ((strideCm / 100) / stepDuration) * 3.6;
+                                    // 濾除不合理的異常跳動 (例如暫停或辨識干擾導致的極端值)
+                                    if (instantSpeedKmh > 2 && instantSpeedKmh < 40) {
+                                        document.getElementById('current_speed').innerText = instantSpeedKmh.toFixed(1);
+                                    }
+                                }
                                 
                                 if (currentStepMaxY !== -Infinity && currentStepMinY !== Infinity) { 
                                     const osc = currentStepMaxY - currentStepMinY;
@@ -400,10 +407,13 @@
                                     footLabel = '右腳 (R)'; footClass = 'foot-r'; pendingRightCellId = currentGctCellId; 
                                 }
 
+                                const speedText = (instantSpeedKmh > 2 && instantSpeedKmh < 40) ? instantSpeedKmh.toFixed(1) : '-';
+
                                 const row = document.createElement('tr');
                                 row.innerHTML = `
                                     <td>${stepCount}</td>
                                     <td class="${footClass}">${footLabel}</td>
+                                    <td class="speed-val">${speedText}</td>
                                     <td id="${currentGctCellId}" class="calculating">運算中...</td>
                                     <td>${strideCm.toFixed(1)}</td>
                                     <td>${stepMinKneeAngle === 180 ? '-' : stepMinKneeAngle.toFixed(1)}</td>
@@ -441,7 +451,6 @@
         skelCtx.restore();
     });
 
-    // ================= 原生攝影機控制與鏡頭切換邏輯 =================
     function stopCameraStream() {
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
@@ -459,11 +468,7 @@
         stopCameraStream();
         try {
             const constraints = {
-                video: {
-                    facingMode: mode,
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                },
+                video: { facingMode: mode, width: { ideal: 640 }, height: { ideal: 480 } },
                 audio: false
             };
             currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -474,7 +479,6 @@
             startBtn.innerText = "關閉攝影機";
             startBtn.style.backgroundColor = "#c0392b";
             
-            // 顯示切換鏡頭按鈕並更新文字
             switchCamBtn.style.display = "inline-block";
             switchCamBtn.innerText = mode === 'environment' ? "切換鏡頭 (目前: 後置)" : "切換鏡頭 (目前: 前置)";
             
@@ -500,11 +504,10 @@
         }
     });
 
-    // 切換前後鏡頭事件
     switchCamBtn.addEventListener('click', () => {
         if (!cameraActive) return;
         currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
-        resetData(); // 切換鏡頭視角改變，清空舊數據重新計算
+        resetData(); 
         startCameraWithFacingMode(currentFacingMode);
     });
     
@@ -529,7 +532,6 @@
     }
 
     videoElement.addEventListener('loadedmetadata', () => {
-        // 動態調整 Canvas 比例以適應直式或橫式鏡頭/影片
         const ratio = videoElement.videoWidth / videoElement.videoHeight;
         canvasElement.width = 640; canvasElement.height = 640 / ratio; 
         skelCanvasElement.width = 640; skelCanvasElement.height = 640 / ratio; 
