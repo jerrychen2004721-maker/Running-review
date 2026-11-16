@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跑步姿態分析 - 雙欄緊湊數據表版</title>
+    <title>跑步姿態分析 - 完整影像比例與雙欄數據版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #121212; color: #e0e0e0; margin: 0; padding: 12px 8px; }
-        .container-main { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+        .container-main { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
         h2 { margin: 0; color: #ffffff; letter-spacing: 1px; font-size: 1.35em; }
 
         .panel { background: #1e1e1e; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; padding: 14px; }
@@ -27,12 +27,12 @@
         .calibration { font-size: 0.9em; color: #bbb; display: flex; align-items: center; gap: 8px; justify-content: center; }
         .calibration input { font-size: 0.95em; width: 62px; text-align: center; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 4px; }
 
-        /* 雙影像畫布區 */
-        .visual-section { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
-        .canvas-wrapper { background: #1e1e1e; padding: 10px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .canvas-label { font-weight: bold; margin-bottom: 8px; color: #ccc; font-size: 0.95em; letter-spacing: 0.5px; }
+        /* 雙影像畫布區：保留原始完整高度與比例 */
+        .visual-section { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; }
+        .canvas-wrapper { background: #1e1e1e; padding: 12px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .canvas-label { font-weight: bold; margin-bottom: 10px; color: #ccc; font-size: 1.05em; letter-spacing: 0.5px; }
         video { display: none; } 
-        canvas { background-color: #000; border-radius: 6px; width: 100%; height: auto; max-width: 640px; max-height: 440px; object-fit: contain; display: block; }
+        canvas { background-color: #000; border-radius: 6px; width: 100%; height: auto; max-width: 640px; display: block; }
 
         /* 時間軸與逐格微調控制列 */
         .timeline-container { display: none; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
@@ -90,14 +90,12 @@
         table.paired-table th, table.paired-table td { padding: 9px 5px; border-bottom: 1px solid #333; font-size: 0.84em; color: #ddd; white-space: nowrap; }
         table.paired-table th { background-color: #2a2a2a; color: #fff; position: sticky; top: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 1; }
         
-        /* 左右兩步中間的明顯分隔線與底色區隔 */
         .pair-divider { border-right: 2px solid #555 !important; }
         .right-half-bg { background-color: rgba(255, 255, 255, 0.025); }
         
         table.paired-table tr { transition: background-color 0.2s; }
         table.paired-table tbody tr:hover { background-color: #263545; }
         
-        /* 單步半邊高亮 (點擊散佈圖圓點時觸發) */
         td.highlight-half { background-color: #f39c12 !important; color: #121212 !important; font-weight: bold; }
         
         .foot-l { color: #5dade2; font-weight: bold; } 
@@ -107,10 +105,10 @@
         .calculating { color: #7f8c8d; font-style: italic; font-size: 0.8em; }
         .empty-slot { color: #444; }
 
-        /* ================= 手機版專屬緊湊響應式設計 (<= 768px) ================= */
+        /* ================= 手機版專屬響應式設計 (<= 768px) ================= */
         @media (max-width: 768px) {
             body { padding: 8px 6px; }
-            .container-main { gap: 8px; }
+            .container-main { gap: 10px; }
             h2 { font-size: 1.15em; }
             .panel { padding: 10px; border-radius: 8px; }
 
@@ -119,10 +117,10 @@
             .btn-group button { padding: 8px 10px; font-size: 0.85em; }
             #switchCamBtn[style*="inline-block"] { grid-column: span 2; }
 
-            .visual-section { grid-template-columns: 1fr 1fr; gap: 6px; }
-            .canvas-wrapper { padding: 6px; border-radius: 8px; }
-            .canvas-label { font-size: 0.78em; margin-bottom: 4px; }
-            canvas { max-height: 210px; }
+            /* 手機版影像改為單欄全寬顯示，保留原始比例與清晰度 */
+            .visual-section { grid-template-columns: 1fr; gap: 10px; }
+            .canvas-wrapper { padding: 10px; border-radius: 8px; }
+            .canvas-label { font-size: 0.9em; margin-bottom: 6px; }
 
             .timeline-container { padding: 8px 10px; gap: 6px; }
             .timeline-btns { width: 100%; justify-content: space-between; }
@@ -167,15 +165,16 @@
         </div>
     </div>
     
+    <!-- 雙影像區：保留原始完整大小與比例 -->
     <div class="visual-section">
         <div class="canvas-wrapper">
-            <div class="canvas-label">原始影像 + 骨架</div>
+            <div class="canvas-label">原始影像 + 骨架追蹤</div>
             <video id="input_video" autoplay playsinline muted></video>
             <canvas id="output_canvas" width="640" height="480"></canvas>
         </div>
         
         <div class="canvas-wrapper">
-            <div class="canvas-label">下肢骨架 (即時角度)</div>
+            <div class="canvas-label">獨立下肢骨架 (即時角度)</div>
             <canvas id="skeleton_canvas" width="640" height="480"></canvas>
         </div>
     </div>
@@ -246,7 +245,6 @@
         </div>
     </div>
 
-    <!-- 雙欄並排數據表 (一列顯示兩步) -->
     <div class="panel tab-panel mobile-hidden" id="tableContainer">
         <div class="table-header-bar">
             <div class="table-title">每步詳細運動學數據 (一列兩步並排)</div>
@@ -260,7 +258,6 @@
             <table class="paired-table">
                 <thead>
                     <tr>
-                        <!-- 左欄步數欄位 -->
                         <th>步數</th>
                         <th>觸地腳</th>
                         <th>時速</th>
@@ -269,7 +266,6 @@
                         <th>步幅</th>
                         <th>右膝</th>
                         <th class="pair-divider">右髖</th>
-                        <!-- 右欄步數欄位 -->
                         <th class="right-half-bg">步數</th>
                         <th class="right-half-bg">觸地腳</th>
                         <th class="right-half-bg">時速</th>
@@ -490,7 +486,6 @@
 
     toggleStepLabels.addEventListener('change', () => { gctHeightChart.update(); });
 
-    // 高亮雙欄表格中指定步數的該半邊 (8 格儲存格)
     function highlightTableStep(stepNum) {
         document.querySelectorAll('#stepTableBody td').forEach(td => td.classList.remove('highlight-half'));
         const targetCells = document.querySelectorAll(`#stepTableBody td[data-step="${stepNum}"]`);
@@ -503,7 +498,6 @@
         }
     }
 
-    // ================= 產生單步 8 格 HTML 儲存格的輔助函式 =================
     function buildStepCellsHtml(r, targetTime, isRightHalf) {
         const bgClass = isRightHalf ? "right-half-bg" : "";
         if (!r) {
@@ -540,24 +534,20 @@
         `;
     }
 
-    // ================= 核心：依據指定時間點同步所有儀表板、圖表與雙欄表格 =================
     function syncAllVisualsToTime(targetTime, forceRebuildTable = false) {
         const validSteps = stepRecords.filter(r => r.time <= targetTime + 0.001);
 
-        // 1. 平均時速
         const validSpeeds = validSteps.filter(r => r.speed !== null).map(r => r.speed);
         document.getElementById('avg_speed').innerText = validSpeeds.length > 0 
             ? (validSpeeds.reduce((a, b) => a + b, 0) / validSpeeds.length).toFixed(1) 
             : "0.0";
 
-        // 2. 平均觸地時間 (GCT)
         const completedGctSteps = validSteps.filter(r => r.gct !== null && r.gctEndTime <= targetTime + 0.001);
         const avgGctMs = completedGctSteps.length > 0 
             ? (completedGctSteps.reduce((a, b) => a + b.gct, 0) / completedGctSteps.length) 
             : 0;
         document.getElementById('gct_display').innerText = avgGctMs > 0 ? Math.round(avgGctMs) : "0";
 
-        // 3. 平均騰空時間 (Flight Time) 與觸地比 (Duty Factor)
         const completedFlightSteps = validSteps.filter(r => r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
         const avgFlightMs = completedFlightSteps.length > 0 
             ? (completedFlightSteps.reduce((a, b) => a + b.flightTime, 0) / completedFlightSteps.length) 
@@ -593,7 +583,6 @@
             dutyDetail.innerText = "等待完整週期...";
         }
 
-        // 4. 左右腳觸地對稱性 (%)
         const leftGcts = completedGctSteps.filter(r => r.isLeft).map(r => r.gct);
         const rightGcts = completedGctSteps.filter(r => !r.isLeft).map(r => r.gct);
         const symDisplay = document.getElementById('symmetry_display');
@@ -631,13 +620,11 @@
             symDetail.innerText = `${statusTag} (${Math.round(avgL)}/${Math.round(avgR)}ms)`;
         }
 
-        // 5. 平均垂直振幅
         const validOscs = validSteps.filter(r => r.osc !== null).map(r => r.osc);
         document.getElementById('vertical_oscillation').innerText = validOscs.length > 0 
             ? (validOscs.reduce((a, b) => a + b, 0) / validOscs.length).toFixed(1) 
             : "0.0";
 
-        // 6. 平均步頻
         if (validSteps.length > 1) {
             const span = validSteps[validSteps.length - 1].time - validSteps[0].time;
             document.getElementById('cadence').innerText = span > 0 ? Math.round((validSteps.length / span) * 60) : "0";
@@ -645,12 +632,10 @@
             document.getElementById('cadence').innerText = "0";
         }
 
-        // 7. 平均跨距
         document.getElementById('avg_stride').innerText = validSteps.length > 0 
             ? (validSteps.reduce((a, b) => a + b.stride, 0) / validSteps.length).toFixed(1) 
             : "0.0";
 
-        // 8. 同步雙欄並排數據表格 (一列兩步：最新兩步在最上方)
         if (forceRebuildTable || validSteps.length !== lastRenderedStepCount) {
             stepTableBody.innerHTML = "";
             const reversedSteps = [...validSteps].reverse();
@@ -664,7 +649,6 @@
             lastRenderedStepCount = validSteps.length;
         }
 
-        // 9. 同步 4 張動態圖表
         const validFrames = frameLogs.filter(f => f.time <= targetTime + 0.001);
         
         const recentFrames = validFrames.slice(-maxDataPoints);
@@ -687,7 +671,6 @@
         gctHeightChart.update();
     }
 
-    // ================= 逐格微調與進度條拖曳控制 =================
     function seekVideoToTime(targetTime) {
         if (cameraActive || !videoElement.duration) return;
         const clampedTime = Math.max(0, Math.min(videoElement.duration, targetTime));
@@ -721,7 +704,6 @@
         }
     });
 
-    // ================= 匯出 CSV 與 LINE 分享邏輯 (直接從 stepRecords 匯出標準單步格式) =================
     function generateCsvContent() {
         const targetTime = cameraActive ? Infinity : parseFloat(videoSlider.value);
         const validSteps = stepRecords.filter(r => r.time <= targetTime + 0.001);
