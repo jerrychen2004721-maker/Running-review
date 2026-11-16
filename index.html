@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跑步姿態分析 - 專業深色介面版 (含即時時速)</title>
+    <title>跑步姿態分析 - 專業深色介面版 (平均時速)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -36,7 +36,7 @@
         input[type="range"] { flex-grow: 1; cursor: pointer; accent-color: #f39c12; }
         .time-display { font-family: monospace; font-size: 1.1em; color: #aaa; min-width: 100px; text-align: right; }
 
-        /* 儀表板：調整為 5 張卡片自適應 */
+        /* 儀表板：5 張卡片全部統一為平均值 */
         #dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 15px; padding: 0; background: transparent; border: none; box-shadow: none; }
         .card { background: #1e1e1e; padding: 15px 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .card .title { font-size: 0.85em; color: #999; text-transform: uppercase; letter-spacing: 1px; }
@@ -104,7 +104,7 @@
     </div>
 
     <div id="dashboard">
-        <div class="card speed-card"><div class="title">當下跑步時速</div><div class="value"><span id="current_speed">0.0</span><span class="unit">km/h</span></div></div>
+        <div class="card speed-card"><div class="title">平均跑步時速</div><div class="value"><span id="avg_speed">0.0</span><span class="unit">km/h</span></div></div>
         <div class="card gct-card"><div class="title">平均觸地時間</div><div class="value"><span id="gct_display">0</span><span class="unit">ms</span></div></div>
         <div class="card"><div class="title">平均垂直振幅</div><div class="value"><span id="vertical_oscillation">0.0</span><span class="unit">cm</span></div></div>
         <div class="card"><div class="title">平均步頻</div><div class="value"><span id="cadence">0</span><span class="unit">SPM</span></div></div>
@@ -124,7 +124,7 @@
                 <tr>
                     <th>步數</th>
                     <th>觸地腳</th>
-                    <th>瞬時時速 (km/h)</th>
+                    <th>單步時速 (km/h)</th>
                     <th>單步觸地時間 (ms)</th>
                     <th>跨步步幅 (cm)</th>
                     <th>右膝最大屈曲 (°)</th>
@@ -178,7 +178,10 @@
     let stepMinKneeAngle = 180; let stepMinHipAngle = 180;
     let nextFootIsLeft = null; 
 
-    let gctHistory = []; let oscHistory = [];
+    // 歷史平均追蹤陣列
+    let gctHistory = []; 
+    let oscHistory = [];
+    let speedHistory = []; // 新增：時速歷史陣列
 
     // ================= 圖表初始化 =================
     const maxDataPoints = 90; const trajMaxPoints = 55;
@@ -209,10 +212,10 @@
         prevAnkleDist = 0; isIncreasing = false; lastStepTime = 0; firstStepTime = 0; stepCount = 0; strideHistory = [];
         currentStepMaxY = -Infinity; currentStepMinY = Infinity; dynamicGroundY = 0; isLeftGrounded = false; isRightGrounded = false;
         pendingLeftCellId = null; pendingRightCellId = null; stepMinKneeAngle = 180; stepMinHipAngle = 180; nextFootIsLeft = null; 
-        gctHistory = []; oscHistory = [];
+        gctHistory = []; oscHistory = []; speedHistory = [];
         lastLeftGCT = null; lastRightGCT = null; leftMaxSwingHeight = 0; rightMaxSwingHeight = 0;
 
-        document.getElementById('current_speed').innerText = "0.0";
+        document.getElementById('avg_speed').innerText = "0.0";
         document.getElementById('avg_stride').innerText = "0.0"; document.getElementById('cadence').innerText = "0";
         document.getElementById('vertical_oscillation').innerText = "0.0"; document.getElementById('gct_display').innerText = "0";
         stepTableBody.innerHTML = ""; 
@@ -379,11 +382,13 @@
 
                                 if (stepCount > 1) {
                                     cadence = Math.round((stepCount / (currentTime - firstStepTime)) * 60);
-                                    // 計算瞬時時速: (跨距公尺 / 單步時間秒) * 3.6
                                     instantSpeedKmh = ((strideCm / 100) / stepDuration) * 3.6;
-                                    // 濾除不合理的異常跳動 (例如暫停或辨識干擾導致的極端值)
+                                    
+                                    // 記錄有效時速並更新儀表板平均值
                                     if (instantSpeedKmh > 2 && instantSpeedKmh < 40) {
-                                        document.getElementById('current_speed').innerText = instantSpeedKmh.toFixed(1);
+                                        speedHistory.push(instantSpeedKmh);
+                                        const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
+                                        document.getElementById('avg_speed').innerText = avgSpeed.toFixed(1);
                                     }
                                 }
                                 
