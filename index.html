@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跑步姿態分析 - 手機迷你卡片網格版</title>
+    <title>跑步姿態分析 - 圖表原地檢視單步數值版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -72,11 +72,69 @@
 
         /* 圖表區 */
         .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .chart-box { height: 220px; width: 100%; position: relative; display: flex; flex-direction: column; }
-        .chart-canvas-wrap { flex-grow: 1; position: relative; min-height: 0; }
+        .chart-box { min-height: 220px; width: 100%; position: relative; display: flex; flex-direction: column; }
+        .chart-canvas-wrap { flex-grow: 1; position: relative; min-height: 185px; }
         .chart-footer { display: flex; justify-content: space-between; align-items: center; font-size: 0.78em; color: #999; margin-top: 6px; padding: 0 4px; }
         .toggle-label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #f1c40f; font-weight: bold; user-select: none; }
         .toggle-label input { cursor: pointer; accent-color: #f1c40f; }
+
+        /* 散佈圖原地單步詳細數值檢視卡 */
+        .scatter-detail-box {
+            display: none;
+            margin-top: 8px;
+            background: #252525;
+            border: 1px solid #f39c12;
+            border-radius: 8px;
+            padding: 8px 10px;
+            text-align: left;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+            animation: fadeInDetail 0.2s ease-out;
+        }
+        @keyframes fadeInDetail {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .sdb-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #383838;
+            padding-bottom: 5px;
+            margin-bottom: 6px;
+        }
+        .sdb-title {
+            font-size: 0.88em;
+            font-weight: bold;
+            color: #f1c40f;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sdb-close {
+            background: transparent;
+            border: none;
+            color: #888;
+            font-size: 1em;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .sdb-close:hover { color: #fff; }
+        .sdb-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px 8px;
+            font-size: 0.78em;
+        }
+        .sdb-item {
+            display: flex;
+            flex-direction: column;
+            background: #1b1b1b;
+            padding: 4px 6px;
+            border-radius: 5px;
+        }
+        .sdb-item span:first-child { color: #888; font-size: 0.86em; }
+        .sdb-item b { color: #fff; font-size: 0.98em; margin-top: 1px; }
 
         /* 數據表格共用標題列 */
         .table-header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #333; }
@@ -96,7 +154,6 @@
         
         table.paired-table tr { transition: background-color 0.2s; }
         table.paired-table tbody tr:hover { background-color: #263545; }
-        td.highlight-half { background-color: #f39c12 !important; color: #121212 !important; font-weight: bold; }
 
         /* 手機版迷你卡片網格 (桌機版隱藏，手機版顯示) */
         .mobile-step-cards-wrap { display: none; }
@@ -111,15 +168,9 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
-            transition: transform 0.2s, border-color 0.3s, box-shadow 0.3s;
         }
         .step-mini-card.left-foot-card { border-left: 3px solid #3498db; }
         .step-mini-card.right-foot-card { border-left: 3px solid #e74c3c; }
-        .step-mini-card.highlight-card {
-            border-color: #f39c12 !important;
-            box-shadow: 0 0 12px rgba(243, 156, 18, 0.65);
-            background-color: #332a18;
-        }
 
         .smc-header {
             display: flex;
@@ -138,7 +189,6 @@
         .smc-foot-badge.badge-l { background: rgba(52, 152, 219, 0.2); color: #5dade2; }
         .smc-foot-badge.badge-r { background: rgba(231, 76, 60, 0.2); color: #ec7063; }
 
-        /* 核心 2 指標 (時速 / 觸地時間) */
         .smc-primary-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -152,7 +202,6 @@
         .smc-val-lg { font-size: 0.98em; font-weight: bold; margin-top: 1px; }
         .smc-unit { font-size: 0.72em; font-weight: normal; color: #888; margin-left: 1px; }
 
-        /* 次要 4 指標 (2x2 緊湊排列) */
         .smc-secondary-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -186,7 +235,6 @@
             .btn-group button { padding: 8px 10px; font-size: 0.85em; }
             #switchCamBtn[style*="inline-block"] { grid-column: span 2; }
 
-            /* 手機版影像單欄全寬顯示，保留原始比例與清晰度 */
             .visual-section { grid-template-columns: 1fr; gap: 10px; }
             .canvas-wrapper { padding: 10px; border-radius: 8px; }
             .canvas-label { font-size: 0.9em; margin-bottom: 6px; }
@@ -207,14 +255,14 @@
 
             .mobile-tabs { display: flex; }
             .charts-container { grid-template-columns: 1fr; gap: 12px; }
-            .chart-box { height: 200px; }
+            .chart-box { min-height: 200px; }
+            .chart-canvas-wrap { min-height: 175px; }
             
             .tab-panel.mobile-hidden { display: none !important; }
             .table-header-bar { flex-direction: row; justify-content: space-between; }
             .table-title { font-size: 0.92em; }
             .export-actions button { padding: 6px 10px; font-size: 0.8em; }
 
-            /* 手機版隱藏寬表格，改為一排兩張迷你卡片網格 (免左右滑動) */
             .table-scroll-wrap { display: none; }
             .mobile-step-cards-wrap {
                 display: grid;
@@ -309,11 +357,19 @@
         <div class="chart-box">
             <div class="chart-canvas-wrap"><canvas id="gctHeightChart"></canvas></div>
             <div class="chart-footer">
-                <span>💡 點擊圓點連動數據與畫面</span>
+                <span>💡 點擊圓點直接檢視該步詳細數值</span>
                 <label class="toggle-label">
                     <input type="checkbox" id="toggleStepLabels" checked>
                     標示步數
                 </label>
+            </div>
+            <!-- 原地單步詳細數值卡片 -->
+            <div class="scatter-detail-box" id="scatterDetailBox">
+                <div class="sdb-header">
+                    <div class="sdb-title" id="sdbTitle">第 1 步詳細數據</div>
+                    <button class="sdb-close" id="sdbCloseBtn" title="關閉">✕</button>
+                </div>
+                <div class="sdb-grid" id="sdbGrid"></div>
             </div>
         </div>
         <div class="chart-box">
@@ -333,7 +389,6 @@
             </div>
         </div>
 
-        <!-- 桌機版雙欄表格 -->
         <div class="table-scroll-wrap">
             <table class="paired-table">
                 <thead>
@@ -361,7 +416,6 @@
             </table>
         </div>
 
-        <!-- 手機版一排兩張迷你卡片網格 (免左右滑動) -->
         <div class="mobile-step-cards-wrap" id="mobileStepCardsWrap">
             <div class="mobile-cards-empty">尚無步態數據，請啟動攝影機或匯入影片</div>
         </div>
@@ -388,6 +442,11 @@
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const shareLineBtn = document.getElementById('shareLineBtn');
     
+    const scatterDetailBox = document.getElementById('scatterDetailBox');
+    const sdbTitle = document.getElementById('sdbTitle');
+    const sdbGrid = document.getElementById('sdbGrid');
+    const sdbCloseBtn = document.getElementById('sdbCloseBtn');
+
     const timelineSection = document.getElementById('timelineSection');
     const prevFrameBtn = document.getElementById('prevFrameBtn');
     const playPauseBtn = document.getElementById('playPauseBtn');
@@ -458,6 +517,10 @@
         });
     });
 
+    sdbCloseBtn.addEventListener('click', () => {
+        scatterDetailBox.style.display = 'none';
+    });
+
     function syncCanvasAspectRatio(width, height) {
         if (!width || !height) return;
         const ratio = width / height;
@@ -512,6 +575,39 @@
     const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#9b59b6', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } } });
     const trajChart = new Chart(document.getElementById('trajChart').getContext('2d'), { type: 'scatter', data: { datasets: [ { label: '左腳軌跡 (L)', data: [], borderColor: '#3498db', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }, { label: '右腳軌跡 (R)', data: [], borderColor: '#e74c3c', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 } ] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: { display: true, text: '相對重心水平位置 (cm)' } }, y: { display: true, title: { display: true, text: '離地高度 (cm)' }, suggestedMin: -5, suggestedMax: 40 } } } });
     
+    // 在散佈圖下方直接展示點擊圓點的完整單步數值
+    function showScatterStepDetail(pointData) {
+        const stepNum = pointData.step;
+        const rec = stepRecords.find(r => r.step === stepNum);
+        const isLeft = pointData.isLeft;
+        const footBadge = isLeft 
+            ? `<span class="smc-foot-badge badge-l">左腳 (L)</span>` 
+            : `<span class="smc-foot-badge badge-r">右腳 (R)</span>`;
+
+        sdbTitle.innerHTML = `<span>第 #${stepNum} 步詳細數據</span> ${footBadge}`;
+
+        const speedStr = (rec && rec.speed !== null) ? `${rec.speed.toFixed(1)} km/h` : '-';
+        const gctStr = `${pointData.x} ms`;
+        const heightStr = `${pointData.y.toFixed(1)} cm`;
+        const flightStr = (rec && rec.flightTime !== null) ? `${rec.flightTime} ms` : '-';
+        const strideStr = rec ? `${rec.stride.toFixed(1)} cm` : '-';
+        const kneeStr = (rec && rec.knee !== null) ? `${rec.knee.toFixed(1)}°` : '-';
+        const hipStr = (rec && rec.hip !== null) ? `${rec.hip.toFixed(1)}°` : '-';
+        const oscStr = (rec && rec.osc !== null) ? `${rec.osc.toFixed(1)} cm` : '-';
+
+        sdbGrid.innerHTML = `
+            <div class="sdb-item"><span>單步時速</span><b class="speed-val">${speedStr}</b></div>
+            <div class="sdb-item"><span>觸地時間</span><b class="${isLeft ? 'foot-l' : 'foot-r'}">${gctStr}</b></div>
+            <div class="sdb-item"><span>離地高度</span><b>${heightStr}</b></div>
+            <div class="sdb-item"><span>騰空時間</span><b class="flight-val">${flightStr}</b></div>
+            <div class="sdb-item"><span>跨步步幅</span><b>${strideStr}</b></div>
+            <div class="sdb-item"><span>垂直振幅</span><b>${oscStr}</b></div>
+            <div class="sdb-item"><span>右膝屈曲</span><b>${kneeStr}</b></div>
+            <div class="sdb-item"><span>右髖屈曲</span><b>${hipStr}</b></div>
+        `;
+        scatterDetailBox.style.display = 'block';
+    }
+
     const gctHeightChart = new Chart(document.getElementById('gctHeightChart').getContext('2d'), {
         type: 'scatter',
         data: {
@@ -558,8 +654,7 @@
                         seekVideoToTime(pointData.time);
                     }
                     if (pointData.step) { 
-                        switchMobileTab('tableContainer');
-                        setTimeout(() => highlightTableStep(pointData.step), 50);
+                        showScatterStepDetail(pointData);
                     }
                 }
             },
@@ -571,31 +666,6 @@
     });
 
     toggleStepLabels.addEventListener('change', () => { gctHeightChart.update(); });
-
-    // 同時支援桌機表格儲存格與手機版迷你卡片的高亮定位
-    function highlightTableStep(stepNum) {
-        // 1. 桌機版雙欄表格高亮
-        document.querySelectorAll('#stepTableBody td').forEach(td => td.classList.remove('highlight-half'));
-        const targetCells = document.querySelectorAll(`#stepTableBody td[data-step="${stepNum}"]`);
-        if (targetCells.length > 0) {
-            targetCells.forEach(td => td.classList.add('highlight-half'));
-            targetCells[0].parentElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            setTimeout(() => {
-                targetCells.forEach(td => td.classList.remove('highlight-half'));
-            }, 3000);
-        }
-
-        // 2. 手機版迷你卡片高亮
-        document.querySelectorAll('#mobileStepCardsWrap .step-mini-card').forEach(card => card.classList.remove('highlight-card'));
-        const targetCard = document.getElementById(`mobile_step_card_${stepNum}`);
-        if (targetCard) {
-            targetCard.classList.add('highlight-card');
-            targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            setTimeout(() => {
-                targetCard.classList.remove('highlight-card');
-            }, 3000);
-        }
-    }
 
     // 產生桌機版雙欄表格單步 8 格 HTML
     function buildStepCellsHtml(r, targetTime, isRightHalf) {
@@ -778,11 +848,9 @@
             ? (validSteps.reduce((a, b) => a + b.stride, 0) / validSteps.length).toFixed(1) 
             : "0.0";
 
-        // 同步桌機雙欄表格與手機版迷你卡片網格
         if (forceRebuildTable || validSteps.length !== lastRenderedStepCount) {
             const reversedSteps = [...validSteps].reverse();
 
-            // 1. 重建桌機雙欄表格
             stepTableBody.innerHTML = "";
             for (let i = 0; i < reversedSteps.length; i += 2) {
                 const leftStep = reversedSteps[i];
@@ -792,7 +860,6 @@
                 stepTableBody.appendChild(row);
             }
 
-            // 2. 重建手機版一排兩張迷你卡片網格
             if (reversedSteps.length === 0) {
                 mobileStepCardsWrap.innerHTML = `<div class="mobile-cards-empty">尚無步態數據，請啟動攝影機或匯入影片</div>`;
             } else {
@@ -817,6 +884,10 @@
         const validScatter = scatterLogs.filter(s => s.recordTime <= targetTime + 0.001);
         gctHeightChart.data.datasets[0].data = validScatter.filter(s => s.isLeft);
         gctHeightChart.data.datasets[1].data = validScatter.filter(s => !s.isLeft);
+
+        if (validScatter.length === 0) {
+            scatterDetailBox.style.display = 'none';
+        }
 
         comChart.update();
         strideChart.update();
@@ -992,6 +1063,7 @@
         frameLogs = [];
         scatterLogs = [];
         lastRenderedStepCount = -1;
+        scatterDetailBox.style.display = 'none';
 
         syncAllVisualsToTime(0, true);
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
