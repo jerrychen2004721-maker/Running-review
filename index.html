@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跑步姿態分析 - 完整影像比例與雙欄數據版</title>
+    <title>跑步姿態分析 - 手機迷你卡片網格版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -78,13 +78,14 @@
         .toggle-label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #f1c40f; font-weight: bold; user-select: none; }
         .toggle-label input { cursor: pointer; accent-color: #f1c40f; }
 
-        /* 雙欄並排數據表格區 (一列顯示兩步) */
+        /* 數據表格共用標題列 */
         .table-header-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #333; }
         .table-title { font-size: 1.05em; font-weight: bold; color: #fff; letter-spacing: 0.5px; }
         .export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         #exportCsvBtn { background-color: #2980b9; } #exportCsvBtn:hover { background-color: #3498db; }
         #shareLineBtn { background-color: #06C755; } #shareLineBtn:hover { background-color: #05b34c; }
 
+        /* 桌機版雙欄並排數據表格 */
         .table-scroll-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; scroll-behavior: smooth; }
         table.paired-table { width: 100%; border-collapse: collapse; text-align: center; min-width: 920px; }
         table.paired-table th, table.paired-table td { padding: 9px 5px; border-bottom: 1px solid #333; font-size: 0.84em; color: #ddd; white-space: nowrap; }
@@ -95,14 +96,82 @@
         
         table.paired-table tr { transition: background-color 0.2s; }
         table.paired-table tbody tr:hover { background-color: #263545; }
-        
         td.highlight-half { background-color: #f39c12 !important; color: #121212 !important; font-weight: bold; }
+
+        /* 手機版迷你卡片網格 (桌機版隱藏，手機版顯示) */
+        .mobile-step-cards-wrap { display: none; }
+        .mobile-cards-empty { color: #777; font-size: 0.9em; padding: 20px 0; grid-column: span 2; }
+        
+        .step-mini-card {
+            background: #252525;
+            border: 1px solid #383838;
+            border-radius: 8px;
+            padding: 8px 9px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: transform 0.2s, border-color 0.3s, box-shadow 0.3s;
+        }
+        .step-mini-card.left-foot-card { border-left: 3px solid #3498db; }
+        .step-mini-card.right-foot-card { border-left: 3px solid #e74c3c; }
+        .step-mini-card.highlight-card {
+            border-color: #f39c12 !important;
+            box-shadow: 0 0 12px rgba(243, 156, 18, 0.65);
+            background-color: #332a18;
+        }
+
+        .smc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 4px;
+        }
+        .smc-step-num { font-weight: bold; font-size: 0.92em; color: #fff; }
+        .smc-foot-badge {
+            font-size: 0.72em;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .smc-foot-badge.badge-l { background: rgba(52, 152, 219, 0.2); color: #5dade2; }
+        .smc-foot-badge.badge-r { background: rgba(231, 76, 60, 0.2); color: #ec7063; }
+
+        /* 核心 2 指標 (時速 / 觸地時間) */
+        .smc-primary-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            background: #1c1c1c;
+            padding: 5px 6px;
+            border-radius: 6px;
+        }
+        .smc-metric { display: flex; flex-direction: column; }
+        .smc-label { font-size: 0.66em; color: #888; }
+        .smc-val-lg { font-size: 0.98em; font-weight: bold; margin-top: 1px; }
+        .smc-unit { font-size: 0.72em; font-weight: normal; color: #888; margin-left: 1px; }
+
+        /* 次要 4 指標 (2x2 緊湊排列) */
+        .smc-secondary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 6px;
+            font-size: 0.76em;
+        }
+        .smc-sub-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #ccc;
+        }
+        .smc-sub-item span:first-child { color: #888; font-size: 0.92em; }
         
         .foot-l { color: #5dade2; font-weight: bold; } 
         .foot-r { color: #ec7063; font-weight: bold; } 
         .speed-val { color: #2ecc71; font-weight: bold; }
         .flight-val { color: #1abc9c; font-weight: bold; }
-        .calculating { color: #7f8c8d; font-style: italic; font-size: 0.8em; }
+        .calculating { color: #7f8c8d; font-style: italic; font-size: 0.85em; }
         .empty-slot { color: #444; }
 
         /* ================= 手機版專屬響應式設計 (<= 768px) ================= */
@@ -117,7 +186,7 @@
             .btn-group button { padding: 8px 10px; font-size: 0.85em; }
             #switchCamBtn[style*="inline-block"] { grid-column: span 2; }
 
-            /* 手機版影像改為單欄全寬顯示，保留原始比例與清晰度 */
+            /* 手機版影像單欄全寬顯示，保留原始比例與清晰度 */
             .visual-section { grid-template-columns: 1fr; gap: 10px; }
             .canvas-wrapper { padding: 10px; border-radius: 8px; }
             .canvas-label { font-size: 0.9em; margin-bottom: 6px; }
@@ -144,7 +213,18 @@
             .table-header-bar { flex-direction: row; justify-content: space-between; }
             .table-title { font-size: 0.92em; }
             .export-actions button { padding: 6px 10px; font-size: 0.8em; }
-            .table-scroll-wrap { max-height: 280px; }
+
+            /* 手機版隱藏寬表格，改為一排兩張迷你卡片網格 (免左右滑動) */
+            .table-scroll-wrap { display: none; }
+            .mobile-step-cards-wrap {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                max-height: 400px;
+                overflow-y: auto;
+                padding-right: 2px;
+                scroll-behavior: smooth;
+            }
         }
     </style>
 </head>
@@ -165,7 +245,6 @@
         </div>
     </div>
     
-    <!-- 雙影像區：保留原始完整大小與比例 -->
     <div class="visual-section">
         <div class="canvas-wrapper">
             <div class="canvas-label">原始影像 + 骨架追蹤</div>
@@ -220,7 +299,7 @@
 
     <div class="mobile-tabs">
         <button class="tab-btn active" data-target="chartsPanel">📊 動態圖表分析</button>
-        <button class="tab-btn" data-target="tableContainer">📋 每步詳細數據 (雙欄)</button>
+        <button class="tab-btn" data-target="tableContainer">📋 每步詳細數據</button>
     </div>
 
     <div class="panel charts-container tab-panel" id="chartsPanel">
@@ -230,7 +309,7 @@
         <div class="chart-box">
             <div class="chart-canvas-wrap"><canvas id="gctHeightChart"></canvas></div>
             <div class="chart-footer">
-                <span>💡 點擊圓點連動表格與畫面</span>
+                <span>💡 點擊圓點連動數據與畫面</span>
                 <label class="toggle-label">
                     <input type="checkbox" id="toggleStepLabels" checked>
                     標示步數
@@ -247,13 +326,14 @@
 
     <div class="panel tab-panel mobile-hidden" id="tableContainer">
         <div class="table-header-bar">
-            <div class="table-title">每步詳細運動學數據 (一列兩步並排)</div>
+            <div class="table-title">每步詳細運動學數據</div>
             <div class="export-actions">
                 <button id="exportCsvBtn">📥 匯出 CSV</button>
                 <button id="shareLineBtn">💬 分享 LINE</button>
             </div>
         </div>
 
+        <!-- 桌機版雙欄表格 -->
         <div class="table-scroll-wrap">
             <table class="paired-table">
                 <thead>
@@ -280,6 +360,11 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- 手機版一排兩張迷你卡片網格 (免左右滑動) -->
+        <div class="mobile-step-cards-wrap" id="mobileStepCardsWrap">
+            <div class="mobile-cards-empty">尚無步態數據，請啟動攝影機或匯入影片</div>
+        </div>
     </div>
 </div>
 
@@ -298,6 +383,7 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const videoUpload = document.getElementById('videoUpload');
     const stepTableBody = document.getElementById('stepTableBody');
+    const mobileStepCardsWrap = document.getElementById('mobileStepCardsWrap');
     const toggleStepLabels = document.getElementById('toggleStepLabels');
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const shareLineBtn = document.getElementById('shareLineBtn');
@@ -486,7 +572,9 @@
 
     toggleStepLabels.addEventListener('change', () => { gctHeightChart.update(); });
 
+    // 同時支援桌機表格儲存格與手機版迷你卡片的高亮定位
     function highlightTableStep(stepNum) {
+        // 1. 桌機版雙欄表格高亮
         document.querySelectorAll('#stepTableBody td').forEach(td => td.classList.remove('highlight-half'));
         const targetCells = document.querySelectorAll(`#stepTableBody td[data-step="${stepNum}"]`);
         if (targetCells.length > 0) {
@@ -496,8 +584,20 @@
                 targetCells.forEach(td => td.classList.remove('highlight-half'));
             }, 3000);
         }
+
+        // 2. 手機版迷你卡片高亮
+        document.querySelectorAll('#mobileStepCardsWrap .step-mini-card').forEach(card => card.classList.remove('highlight-card'));
+        const targetCard = document.getElementById(`mobile_step_card_${stepNum}`);
+        if (targetCard) {
+            targetCard.classList.add('highlight-card');
+            targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => {
+                targetCard.classList.remove('highlight-card');
+            }, 3000);
+        }
     }
 
+    // 產生桌機版雙欄表格單步 8 格 HTML
     function buildStepCellsHtml(r, targetTime, isRightHalf) {
         const bgClass = isRightHalf ? "right-half-bg" : "";
         if (!r) {
@@ -531,6 +631,48 @@
             <td data-step="${r.step}" class="${bgClass}">${r.stride.toFixed(1)}</td>
             <td data-step="${r.step}" class="${bgClass}">${r.knee !== null ? r.knee.toFixed(1) + '°' : '-'}</td>
             <td data-step="${r.step}" class="${bgClass} ${dividerClass}">${r.hip !== null ? r.hip.toFixed(1) + '°' : '-'}</td>
+        `;
+    }
+
+    // 產生手機版單步迷你卡片 HTML
+    function buildMobileMiniCardHtml(r, targetTime) {
+        const isGctReady = (r.gct !== null && r.gctEndTime <= targetTime + 0.001);
+        const gctHtml = isGctReady 
+            ? `<span class="${r.isLeft ? 'foot-l' : 'foot-r'}">${r.gct}<span class="smc-unit">ms</span></span>` 
+            : `<span class="calculating">運算中</span>`;
+
+        const isFlightReady = (r.flightTime !== null && r.flightEndTime <= targetTime + 0.001);
+        const flightHtml = isFlightReady 
+            ? `<span class="flight-val">${r.flightTime}ms</span>` 
+            : `<span class="calculating">-</span>`;
+
+        const speedHtml = r.speed !== null 
+            ? `<span class="speed-val">${r.speed.toFixed(1)}<span class="smc-unit">km/h</span></span>` 
+            : `<span>-</span>`;
+
+        return `
+            <div class="step-mini-card ${r.isLeft ? 'left-foot-card' : 'right-foot-card'}" id="mobile_step_card_${r.step}">
+                <div class="smc-header">
+                    <span class="smc-step-num">#${r.step}</span>
+                    <span class="smc-foot-badge ${r.isLeft ? 'badge-l' : 'badge-r'}">${r.isLeft ? '左腳 (L)' : '右腳 (R)'}</span>
+                </div>
+                <div class="smc-primary-row">
+                    <div class="smc-metric">
+                        <span class="smc-label">時速</span>
+                        <span class="smc-val-lg">${speedHtml}</span>
+                    </div>
+                    <div class="smc-metric">
+                        <span class="smc-label">觸地時間</span>
+                        <span class="smc-val-lg">${gctHtml}</span>
+                    </div>
+                </div>
+                <div class="smc-secondary-grid">
+                    <div class="smc-sub-item"><span>騰空</span><b>${flightHtml}</b></div>
+                    <div class="smc-sub-item"><span>步幅</span><b>${r.stride.toFixed(1)}cm</b></div>
+                    <div class="smc-sub-item"><span>右膝</span><b>${r.knee !== null ? r.knee.toFixed(1) + '°' : '-'}</b></div>
+                    <div class="smc-sub-item"><span>右髖</span><b>${r.hip !== null ? r.hip.toFixed(1) + '°' : '-'}</b></div>
+                </div>
+            </div>
         `;
     }
 
@@ -636,9 +778,12 @@
             ? (validSteps.reduce((a, b) => a + b.stride, 0) / validSteps.length).toFixed(1) 
             : "0.0";
 
+        // 同步桌機雙欄表格與手機版迷你卡片網格
         if (forceRebuildTable || validSteps.length !== lastRenderedStepCount) {
-            stepTableBody.innerHTML = "";
             const reversedSteps = [...validSteps].reverse();
+
+            // 1. 重建桌機雙欄表格
+            stepTableBody.innerHTML = "";
             for (let i = 0; i < reversedSteps.length; i += 2) {
                 const leftStep = reversedSteps[i];
                 const rightStep = reversedSteps[i + 1] || null;
@@ -646,6 +791,14 @@
                 row.innerHTML = buildStepCellsHtml(leftStep, targetTime, false) + buildStepCellsHtml(rightStep, targetTime, true);
                 stepTableBody.appendChild(row);
             }
+
+            // 2. 重建手機版一排兩張迷你卡片網格
+            if (reversedSteps.length === 0) {
+                mobileStepCardsWrap.innerHTML = `<div class="mobile-cards-empty">尚無步態數據，請啟動攝影機或匯入影片</div>`;
+            } else {
+                mobileStepCardsWrap.innerHTML = reversedSteps.map(r => buildMobileMiniCardHtml(r, targetTime)).join("");
+            }
+
             lastRenderedStepCount = validSteps.length;
         }
 
