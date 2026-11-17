@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跑步姿態分析 - 圖表原地檢視單步數值版</title>
+    <title>跑步姿態分析 - 圖表純粹原地檢視單步數值版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -363,7 +363,6 @@
                     標示步數
                 </label>
             </div>
-            <!-- 原地單步詳細數值卡片 -->
             <div class="scatter-detail-box" id="scatterDetailBox">
                 <div class="sdb-header">
                     <div class="sdb-title" id="sdbTitle">第 1 步詳細數據</div>
@@ -575,7 +574,7 @@
     const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#9b59b6', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } } });
     const trajChart = new Chart(document.getElementById('trajChart').getContext('2d'), { type: 'scatter', data: { datasets: [ { label: '左腳軌跡 (L)', data: [], borderColor: '#3498db', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }, { label: '右腳軌跡 (R)', data: [], borderColor: '#e74c3c', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 } ] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: { display: true, text: '相對重心水平位置 (cm)' } }, y: { display: true, title: { display: true, text: '離地高度 (cm)' }, suggestedMin: -5, suggestedMax: 40 } } } });
     
-    // 在散佈圖下方直接展示點擊圓點的完整單步數值
+    // 在散佈圖下方直接展示點擊圓點的完整單步數值（不影響影片時間軸）
     function showScatterStepDetail(pointData) {
         const stepNum = pointData.step;
         const rec = stepRecords.find(r => r.step === stepNum);
@@ -650,9 +649,6 @@
                     const index = elements[0].index;
                     const pointData = gctHeightChart.data.datasets[datasetIndex].data[index];
 
-                    if (!cameraActive && pointData.time !== undefined && videoElement.duration) {
-                        seekVideoToTime(pointData.time);
-                    }
                     if (pointData.step) { 
                         showScatterStepDetail(pointData);
                     }
