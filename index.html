@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跑步姿態分析 - 圖表純粹原地檢視單步數值版</title>
+    <title>跑步姿態分析 - 手機直向/橫向雙模式最佳化版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -27,7 +27,7 @@
         .calibration { font-size: 0.9em; color: #bbb; display: flex; align-items: center; gap: 8px; justify-content: center; }
         .calibration input { font-size: 0.95em; width: 62px; text-align: center; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 4px; }
 
-        /* 雙影像畫布區：保留原始完整高度與比例 */
+        /* 雙影像畫布區 */
         .visual-section { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; }
         .canvas-wrapper { background: #1e1e1e; padding: 12px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .canvas-label { font-weight: bold; margin-bottom: 10px; color: #ccc; font-size: 1.05em; letter-spacing: 0.5px; }
@@ -157,7 +157,7 @@
 
         /* 手機版迷你卡片網格 (桌機版隱藏，手機版顯示) */
         .mobile-step-cards-wrap { display: none; }
-        .mobile-cards-empty { color: #777; font-size: 0.9em; padding: 20px 0; grid-column: span 2; }
+        .mobile-cards-empty { color: #777; font-size: 0.9em; padding: 20px 0; grid-column: 1 / -1; }
         
         .step-mini-card {
             background: #252525;
@@ -223,8 +223,8 @@
         .calculating { color: #7f8c8d; font-style: italic; font-size: 0.85em; }
         .empty-slot { color: #444; }
 
-        /* ================= 手機版專屬響應式設計 (<= 768px) ================= */
-        @media (max-width: 768px) {
+        /* ================= 1. 手機直向專屬響應式設計 (Portrait <= 768px) ================= */
+        @media (max-width: 768px) and (orientation: portrait) {
             body { padding: 8px 6px; }
             .container-main { gap: 10px; }
             h2 { font-size: 1.15em; }
@@ -273,6 +273,68 @@
                 padding-right: 2px;
                 scroll-behavior: smooth;
             }
+        }
+
+        /* ================= 2. 手機橫向專屬響應式設計 (Landscape <= 960px 或 高度 <= 550px) ================= */
+        @media (max-width: 960px) and (orientation: landscape), (max-height: 550px) and (orientation: landscape) {
+            body { padding: 6px 10px; }
+            .container-main { gap: 8px; }
+            h2 { font-size: 1.05em; letter-spacing: 0.5px; }
+            .panel { padding: 8px 10px; border-radius: 8px; }
+
+            /* 頂部控制列單行緊湊排版 */
+            .controls { flex-direction: row; justify-content: space-between; align-items: center; gap: 8px; }
+            .btn-group { display: flex; flex-wrap: nowrap; gap: 6px; }
+            .btn-group button { padding: 6px 10px; font-size: 0.8em; }
+            .calibration { font-size: 0.82em; }
+            .calibration input { width: 54px; padding: 3px; font-size: 0.9em; }
+
+            /* 雙畫布 1:1 並排，高度限制在 58vh 以內方便一屏觀看 */
+            .visual-section { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .canvas-wrapper { padding: 8px; border-radius: 8px; }
+            .canvas-label { font-size: 0.85em; margin-bottom: 4px; }
+            canvas { max-height: 58vh; width: auto; max-width: 100%; object-fit: contain; }
+
+            /* 時間軸單行整合 */
+            .timeline-container { padding: 6px 10px; gap: 8px; flex-wrap: nowrap; }
+            .timeline-btns { width: auto; gap: 4px; }
+            .step-frame-btn, #playPauseBtn { padding: 5px 8px; font-size: 0.78em; }
+            .time-display { font-size: 0.82em; min-width: 78px; }
+
+            /* 儀表板 4 欄 x 2 排全展開，不折疊 */
+            #dashboard { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+            #dashboard.collapsed .secondary-card { display: flex; }
+            #toggleCardsBtn { display: none !important; }
+            .card { padding: 6px 6px; border-radius: 6px; }
+            .card .title { font-size: 0.68em; }
+            .card .value { font-size: 1.15em; margin-top: 2px; }
+            .card .sub-info { font-size: 0.64em; margin-top: 2px; }
+
+            /* 橫向寬度足夠，顯示分頁籤或直接 2x2 圖表與 3 欄卡片 */
+            .mobile-tabs { display: flex; padding: 4px; }
+            .tab-btn { padding: 7px; font-size: 0.85em; }
+            .tab-panel.mobile-hidden { display: none !important; }
+
+            /* 圖表 2x2 雙欄網格 */
+            .charts-container { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .chart-box { min-height: 175px; }
+            .chart-canvas-wrap { min-height: 145px; }
+            .sdb-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+
+            /* 每步數據使用「一排 3 張迷你卡片」網格，充分利用橫向寬度 */
+            .table-scroll-wrap { display: none; }
+            .mobile-step-cards-wrap {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+                max-height: 65vh;
+                overflow-y: auto;
+                padding-right: 2px;
+                scroll-behavior: smooth;
+            }
+            .table-header-bar { margin-bottom: 8px; padding-bottom: 6px; }
+            .table-title { font-size: 0.9em; }
+            .export-actions button { padding: 5px 9px; font-size: 0.78em; }
         }
     </style>
 </head>
@@ -520,6 +582,14 @@
         scatterDetailBox.style.display = 'none';
     });
 
+    // 螢幕旋轉或視窗尺寸改變時，重新通知 Chart.js 自適應新容器寬高
+    window.addEventListener('resize', () => {
+        comChart.resize();
+        strideChart.resize();
+        trajChart.resize();
+        gctHeightChart.resize();
+    });
+
     function syncCanvasAspectRatio(width, height) {
         if (!width || !height) return;
         const ratio = width / height;
@@ -574,7 +644,6 @@
     const strideChart = new Chart(document.getElementById('strideChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ label: '雙腳踝距離變化 (cm)', data: [], borderColor: '#9b59b6', borderWidth: 2, tension: 0.3 }] }, options: { ...chartOptions, scales: { y: { suggestedMin: 0 }, x: { display: false } } } });
     const trajChart = new Chart(document.getElementById('trajChart').getContext('2d'), { type: 'scatter', data: { datasets: [ { label: '左腳軌跡 (L)', data: [], borderColor: '#3498db', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 }, { label: '右腳軌跡 (R)', data: [], borderColor: '#e74c3c', borderWidth: 2, showLine: true, pointRadius: 0, tension: 0.3 } ] }, options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: { display: true, text: '相對重心水平位置 (cm)' } }, y: { display: true, title: { display: true, text: '離地高度 (cm)' }, suggestedMin: -5, suggestedMax: 40 } } } });
     
-    // 在散佈圖下方直接展示點擊圓點的完整單步數值（不影響影片時間軸）
     function showScatterStepDetail(pointData) {
         const stepNum = pointData.step;
         const rec = stepRecords.find(r => r.step === stepNum);
@@ -663,7 +732,6 @@
 
     toggleStepLabels.addEventListener('change', () => { gctHeightChart.update(); });
 
-    // 產生桌機版雙欄表格單步 8 格 HTML
     function buildStepCellsHtml(r, targetTime, isRightHalf) {
         const bgClass = isRightHalf ? "right-half-bg" : "";
         if (!r) {
@@ -700,7 +768,6 @@
         `;
     }
 
-    // 產生手機版單步迷你卡片 HTML
     function buildMobileMiniCardHtml(r, targetTime) {
         const isGctReady = (r.gct !== null && r.gctEndTime <= targetTime + 0.001);
         const gctHtml = isGctReady 
@@ -1238,7 +1305,7 @@
                                 step: targetStep, 
                                 time: pendingRightStepTime || rightContactStartTime 
                             }; 
-                            rightMaxSwingHeight = 0;
+                            rightMaxSwingHeight = 0; 
 
                             const rec = stepRecords.find(r => r.step === targetStep);
                             if (rec) {
